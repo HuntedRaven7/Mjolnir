@@ -1,0 +1,8 @@
+[Unit]
+Description=Mjolnir factory reset
+Documentation=https://github.com/HuntedRaven7/Mjolnir/tree/main/plugins/console
+# Equivalent to factory-reset.target but with our headless overrides: the
+# stock target requests EFI variable and TPM clears that need physical
+# confirmation. Unattended nodes cannot answer those prompts.
+Wants=systemd-factory-reset-request.service systemd-factory-reset-reboot.service
+After=systemd-factory-reset-request.service

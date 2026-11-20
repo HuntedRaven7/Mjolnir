@@ -1,0 +1,63 @@
+# Security features
+
+## SBOM (software bill of materials)
+
+Mjolnir publishes an **SPDX 2.3 SBOM generated from the BuildStream source
+graph** (`just sbom`), using `buildstream-sbom` pinned by commit in
+`include/versions.yml`. This captures junctioned FSDK sources that a post-build
+syft scan cannot see. The SBOM is uploaded as a CI artifact and can be attached
+to the image as an OCI referrer with `oras attach`.
+
+Verify a published image with `scripts/verify-image.sh IMAGE DIGEST`:
+- keyless `cosign verify` with our workflow identity
+- legacy `.sig` tag presence (bootc/podman compatibility)
+- SPDX v2.3 attestation when available
+
+`sign-and-publish@v1` is configured with `generate-sbom: false` and an explicit
+`certificate-identity-regexp` because its default regexp only matches
+projectbluefin orgs.
+
+## Measured boot attestation
+
+`mjolnir-fleet` produces an opportunistic attestation report
+(`io.mjolnir.Fleet.Attestation`) and includes it in `MjolnirNode.status.attestation`:
+
+- SHA-256 PCR values from `/sys/class/tpm/tpm0/pcr-sha256/*` when a TPM is present
+- SHA-256 hash of the binary TCG event log
+- UKI PE hash and the `/usr` verity root hash from the booted system
+- boot ID and machine ID
+
+**This is evidence, not a hardware-backed proof.** Full `TPM2_Quote` with a
+provisioned attestation key is deferred; the fleet controller decides the
+`verified` field. No TPM is required — the report falls back to software mode.
+No shell or interpreter is used in the image.
+
+## Factory reset
+
+`io.mjolnir.Fleet.FactoryReset` requires an explicit
+`{"confirm":"factory-reset"}` parameter. It starts `mjolnir-factory-reset.target`
+over sd-bus; systemd persists the request in the `FactoryResetRequest` EFI
+variable and reboots via `SuccessAction=reboot`.
+
+The state partition is marked `FactoryReset=yes` in `repart.d`, so systemd-repart
+deletes and recreates it in the initrd on the reset boot — this is what actually
+wipes the allowlist (kubelet certs, WiFi profiles, join state). The stock
+`factory-reset.target` asks for physical confirmation to clear EFI/TPM, so our
+target omits those units for headless operation.
+
+After a reset the controller must re-provision credentials (kubelet bootstrap,
+WiFi PSK, Varlink client CA) and rotate the machine-id karg. Coordinate the
+reset with kured by cordoning/draining the node first; factory reset does not go
+through kured's sentinel.
+
+## Reproducibility
+
+`just repro` builds `oci/mjolnir.bst` twice from scratch and compares the
+BuildStream artifact CAS digest and a hash of the complete OCI layout. Both must
+match. This is a weekly CI check.
+
+## Golden image diff
+
+PRs post a `/usr` file-list diff between the published image and the PR build
+as a collapsed GitHub comment (`scripts/image-diff.sh`). Volatile paths
+(`machine-id`, `resolv.conf`, logs, `run`, whiteouts) are excluded.

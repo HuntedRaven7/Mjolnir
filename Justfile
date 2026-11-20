@@ -37,6 +37,28 @@ export:
     {{podman}} tag "$IMAGE_ID" "{{image_name}}:{{image_tag}}"
     {{podman}} images | grep -E '{{image_name}}|REPOSITORY' || true
 
+# Generate an SPDX 2.3 SBOM from the BuildStream source graph (dakota-style).
+# buildstream-sbom reads the BST element graph, so it captures junctioned FSDK
+# sources that a post-build syft scan cannot see.
+sbom:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REF=$(grep 'buildstream-sbom-ref' include/versions.yml | sed -E 's/.*"(.*)"/\1/')
+    python3 -m pip install --quiet --user "git+https://gitlab.com/BuildStream/buildstream-sbom.git@${REF}"
+    ELEMENT=oci/mjolnir.bst
+    SPDX_NAME=mjolnir
+    NAMESPACE="https://github.com/HuntedRaven7/Mjolnir/sbom/$(git rev-parse HEAD)"
+    mkdir -p sbom_out
+    just bst show "$ELEMENT" --deps all >/dev/null
+    ~/.local/bin/buildstream-sbom "$ELEMENT" \
+      --spdx-name "${SPDX_NAME}" \
+      --spdx-namespace "${NAMESPACE}" \
+      --spdx-creator "Tool: buildstream-sbom" \
+      --spdx-creator "Organization: Mjolnir" \
+      --deps all \
+      --output /src/sbom_out/mjolnir.spdx.json
+    echo "wrote sbom_out/mjolnir.spdx.json"
+
 # Full local build.
 build: bst-build export
 
@@ -85,3 +107,16 @@ clean:
 # Build the minimal live installer ISO (requires xorriso and mtools).
 iso:
     ./installer/build-iso.sh
+
+# Check host prerequisites for build/test/ISO (read-only).
+doctor:
+    #!/usr/bin/env bash
+    exec bash "{{justfile_directory()}}/scripts/doctor.sh" "{{podman}}" "{{bst2_image}}" "{{justfile_directory()}}"
+
+# Verify the image builds reproducibly (twice, compare digests).
+repro:
+    ./scripts/repro-check.sh
+
+# Diff the published image against the local build for PR comments.
+image-diff old="ghcr.io/HuntedRaven7/Mjolnir:latest" new="localhost/mjolnir:latest" out="pr-comment.md":
+    ./scripts/image-diff.sh "{{old}}" "{{new}}" "{{out}}"

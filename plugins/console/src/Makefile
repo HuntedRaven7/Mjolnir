@@ -1,13 +1,13 @@
 CC ?= cc
 CFLAGS ?= -O2 -Wall -Wextra -Werror -std=c11
-LDLIBS ?= -ljson-c -lsystemd
+LDLIBS ?= -ljson-c -lsystemd -lcrypto
 DESTDIR ?=
 PREFIX ?= /usr
 
 all: mjolnir-fleet
 
-mjolnir-fleet: fleet.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< $(LDFLAGS) $(LDLIBS)
+mjolnir-fleet: fleet.c attest.c attest.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ fleet.c attest.c $(LDFLAGS) $(LDLIBS)
 
 install: mjolnir-fleet
 	install -Dm755 mjolnir-fleet "$(DESTDIR)$(PREFIX)/bin/mjolnir-fleet"

@@ -1,0 +1,84 @@
+name: quality
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"   # weekly reproducibility check
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  image-diff:
+    name: Golden image diff
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+    env:
+      PODMAN: "sudo podman"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Build image
+        run: just build
+      - name: Generate diff
+        run: just image-diff new=localhost/mjolnir:latest out=pr-comment.md
+      - name: Post comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- mjolnir-image-diff -->';
+            const text = marker + '\n' + fs.readFileSync('pr-comment.md', 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number, owner: context.repo.owner, repo: context.repo.repo,
+            });
+            const existing = comments.find(c => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ comment_id: existing.id, body: text, owner: context.repo.owner, repo: context.repo.repo });
+            } else {
+              await github.rest.issues.createComment({ issue_number: context.issue.number, body: text, owner: context.repo.owner, repo: context.repo.repo });
+            }
+
+  reproducibility:
+    name: Reproducibility
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Build twice and compare
+        run: just repro
+
+  sbom:
+    name: BST-native SPDX SBOM
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cosign,oras
+      - name: Generate SBOM
+        run: just sbom
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mjolnir-spdx
+          path: sbom_out/mjolnir.spdx.json

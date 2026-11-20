@@ -109,8 +109,13 @@ jobs:
         with:
           image: ghcr.io/${{ github.repository_owner }}/mjolnir
           signing-mode: keyless
-          generate-sbom: 'true'
+          # The BST-native SPDX SBOM is produced by the `sbom` job in quality.yml
+          # (it captures junctioned FSDK sources that a syft scan cannot see).
+          generate-sbom: 'false'
           push-attestation: 'true'
+          # The action's default regexp only matches projectbluefin orgs; it
+          # would fail to verify our own keyless signature.
+          certificate-identity-regexp: '^https://github\.com/${{ github.repository_owner }}/Mjolnir/\.github/workflows/build\.yml@refs/heads/(main|gh-readonly-queue/main/.+)$'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           image-name: mjolnir
 

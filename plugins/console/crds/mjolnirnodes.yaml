@@ -56,6 +56,22 @@ spec:
                 rebootLock: { type: boolean }
                 rebootDeferred: { type: boolean }
                 lastCheck: { type: string, format: date-time }
+                attestation:
+                  type: object
+                  properties:
+                    method: { type: string, enum: [tpm2, software, none] }
+                    bootId: { type: string }
+                    machineId: { type: string }
+                    pcrBank: { type: string }
+                    pcrValues:
+                      type: object
+                      additionalProperties: { type: string }
+                    eventLogHashSha256: { type: string }
+                    uki:
+                      type: object
+                      properties:
+                        peHashSha256: { type: string }
+                    usrVerityRootHash: { type: string }
                 wifi:
                   type: object
                   properties:

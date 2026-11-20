@@ -17,7 +17,10 @@
 #include <unistd.h>
 
 #include <json-c/json.h>
+#include <systemd/sd-bus.h>
 #include <systemd/sd-daemon.h>
+
+#include "attest.h"
 
 #define KUBECONFIG "/run/mjolnir/fleet.kubeconfig"
 #define STATUS_FILE "/run/mjolnir/mjolnirnode.yaml"
@@ -315,6 +318,7 @@ static json_object *build_status(void) {
 
 static void cmd_status(void) {
     json_object *j = build_status();
+    json_object_object_add(j, "attestation", mjolnir_attestation());
     printf("%s\n", json_object_to_json_string_ext(j, JSON_C_TO_STRING_PLAIN));
     json_object_put(j);
 }
@@ -345,6 +349,7 @@ static const char *jstr(json_object *o, const char *key) {
 static void cmd_publish(void) {
     ensure_kubeconfig();
     json_object *j = build_status();
+    json_object_object_add(j, "attestation", mjolnir_attestation());
     char *name = node_name();
     char yaml[16384];
     snprintf(yaml, sizeof(yaml),
@@ -364,6 +369,8 @@ static void cmd_publish(void) {
         "  rebootLock: %s\n"
         "  rebootDeferred: %s\n"
         "  lastCheck: %s\n"
+        "  attestation:\n"
+        "    method: %s\n"
         "  wifi:\n"
         "    ssid: %s\n"
         "    interface: %s\n"
@@ -377,6 +384,7 @@ static void cmd_publish(void) {
         json_object_get_boolean(json_object_object_get(j, "rebootLock")) ? "true" : "false",
         json_object_get_boolean(json_object_object_get(j, "rebootDeferred")) ? "true" : "false",
         jstr(j, "lastCheck"),
+        jstr(json_object_object_get(j, "attestation"), "method"),
         jstr(json_object_object_get(j, "wifi"), "ssid"),
         jstr(json_object_object_get(j, "wifi"), "interface"),
         jstr(json_object_object_get(j, "wifi"), "state"),
@@ -425,7 +433,46 @@ static json_object *dispatch(json_object *req) {
         json_object_object_add(o, "interfaces", interfaces);
         return o;
     }
-    if (!strcmp(method, "io.mjolnir.Fleet.Status")) return build_status();
+    if (!strcmp(method, "io.mjolnir.Fleet.Status")) {
+        json_object *j = build_status();
+        json_object_object_add(j, "attestation", mjolnir_attestation());
+        return j;
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.Attestation")) return mjolnir_attestation();
+    if (!strcmp(method, "io.mjolnir.Fleet.FactoryReset")) {
+        // Explicit confirmation is mandatory: a stray call must never wipe a node.
+        const char *confirm = jstr(params, "confirm");
+        if (!confirm || strcmp(confirm, "factory-reset")) {
+            json_object *e = json_object_new_object();
+            json_object_object_add(e, "error", json_object_new_string("ConfirmationRequired"));
+            return e;
+        }
+        if (access("/sys/firmware/efi", F_OK) != 0) {
+            json_object *e = json_object_new_object();
+            json_object_object_add(e, "error", json_object_new_string("Unsupported"));
+            return e;
+        }
+        sd_bus *bus = NULL;
+        sd_bus_error err = SD_BUS_ERROR_NULL;
+        sd_bus_message *msg = NULL, *reply = NULL;
+        int r = sd_bus_default_system(&bus);
+        if (r >= 0)
+            r = sd_bus_message_new_method_call(bus, &msg,
+                "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+                "org.freedesktop.systemd1.Manager", "StartUnit");
+        if (r >= 0) r = sd_bus_message_append(msg, "ss", "mjolnir-factory-reset.target", "replace");
+        if (r >= 0) r = sd_bus_call(bus, msg, 0, &err, &reply);
+        if (r < 0) {
+            fprintf(stderr, "mjolnir-fleet: factory reset StartUnit failed: %s\n",
+                    err.message ? err.message : strerror(-r));
+        }
+        sd_bus_error_free(&err);
+        if (msg) sd_bus_message_unref(msg);
+        if (reply) sd_bus_message_unref(reply);
+        if (bus) sd_bus_unref(bus);
+        return action_result("factory-reset",
+                             r < 0 ? "request failed" : "requested for next boot; node will reboot");
+    }
     if (!strcmp(method, "io.mjolnir.Fleet.WifiStatus")) {
         json_object *all = build_status();
         json_object *wifi = json_object_object_get(all, "wifi");
@@ -546,6 +593,11 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (!strcmp(argv[1], "status")) cmd_status();
+    else if (!strcmp(argv[1], "attest")) {
+        json_object *j = mjolnir_attestation();
+        printf("%s\n", json_object_to_json_string_ext(j, JSON_C_TO_STRING_PLAIN));
+        json_object_put(j);
+    }
     else if (!strcmp(argv[1], "publish")) cmd_publish();
     else if (!strcmp(argv[1], "varlink")) cmd_varlink();
     else {

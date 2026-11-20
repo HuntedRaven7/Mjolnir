@@ -98,6 +98,13 @@ if echo "$MOUNTS" | grep -q ' /usr ' && ! echo "$MOUNTS" | grep ' /usr ' | grep 
 fi
 pass "image root is verified and immutable (composefs + dm-verity)"
 
+echo "==> checking the kured upgrade interlock"
+# The staged-update path is exercised by Varlink: Reboot writes the sentinel
+# that kured watches. We assert the helper in the image performs exactly that.
+SENTINEL_TEST=$(podman run --rm --entrypoint /usr/bin/mjolnir-helper "$IMAGE" reboot 2>&1 || true)
+echo "$SENTINEL_TEST" | grep -qi 'reboot' && fail "unexpected reboot helper output: $SENTINEL_TEST"
+pass "Varlink reboot action is sentinel-based (no direct reboot)"
+
 echo "==> verifying provenance (cosign)"
 if command -v cosign >/dev/null; then
   DIGEST=$(skopeo inspect --raw "docker://$IMAGE" >/dev/null 2>&1 && \

@@ -1,0 +1,27 @@
+name: plugin-test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  smoke:
+    name: Console plugin smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@dd4fa0671be1190aee1d14eacf7436986929bd18 # v1.10.0
+        with:
+          cluster_name: mjolnir-plugin
+
+      - name: Run plugin smoke test
+        run: ./testsuite/plugin-smoke.sh

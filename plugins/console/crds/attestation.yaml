@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# Patch fragment applied to MjolnirNode.status.properties.attestation.
+# The `verified` field is set by the fleet controller, never by the node.
+type: object
+properties:
+  method: { type: string, enum: [tpm2-quote, software, none] }
+  verified: { type: boolean }
+  nonce: { type: string }
+  timestamp: { type: string, format: date-time }
+  bootId: { type: string }
+  machineId: { type: string }
+  pcrBank: { type: string }
+  pcrValues:
+    type: object
+    additionalProperties: { type: string }
+  quote:
+    type: object
+    properties:
+      akPublicKeyPem: { type: string }
+      attestationBase64: { type: string }
+      signatureBase64: { type: string }
+      pcrSelection: { type: string }
+  eventLogHashSha256: { type: string }
+  softwareReport:
+    type: object
+    properties:
+      reportBase64: { type: string }
+      signatureBase64: { type: string }
+      signingKeyId: { type: string }
+  uki:
+    type: object
+    properties:
+      peHashSha256: { type: string }
+      pcr11Predicted: { type: string }
+  usrVerityRootHash: { type: string }
+  imageDigest: { type: string }

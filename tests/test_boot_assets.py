@@ -37,6 +37,7 @@ required = [
     "/usr/lib/systemd/system/var-lib-kubelet.mount",
     "/usr/lib/systemd/system/var-log-journal.mount",
     "/usr/lib/tmpfiles.d/mjolnir-volatile.conf",
+    "/usr/lib/systemd/system/mjolnir-factory-reset.target",
     "/usr/bin/nmcli",
     "/usr/bin/wpa_supplicant",
     "/etc/mjolnir/kubeadm-init.yaml",
