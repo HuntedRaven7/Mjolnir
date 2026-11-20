@@ -30,6 +30,12 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 240
+    # Keep every Podman invocation in the same (root) store. `just` forwards
+    # PODMAN to export, lint and the Python content checks; the push step below
+    # uses the same store. Otherwise export writes to the rootless store and
+    # "sudo podman push" cannot see the image.
+    env:
+      PODMAN: "sudo podman"
     permissions:
       contents: read
       packages: write
@@ -62,11 +68,14 @@ jobs:
       - name: bootc lint
         run: just lint
 
+      - name: Export image for scanning
+        run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest
+
       - name: Scan image
         uses: projectbluefin/actions/bootc-build/scan-image@v1
         continue-on-error: true
         with:
-          image: localhost/mjolnir:latest
+          input: /tmp/scan-image.tar
           severity-threshold: CRITICAL
           exit-code: '0'
           github-token: ${{ secrets.GITHUB_TOKEN }}
