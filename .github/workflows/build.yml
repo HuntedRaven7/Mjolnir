@@ -108,8 +108,13 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io \
             -u "${{ github.actor }}" --password-stdin
-          sudo podman push localhost/mjolnir:latest \
-            ghcr.io/${{ github.repository_owner }}/mjolnir:latest
+          # Use explicit docker:// transport. After chunka rechunks in place,
+          # Podman can misparse the bare registry destination as a transport
+          # name ("unknown transport ghcr.io/..."); the explicit prefix avoids
+          # that, and resolving the source by immutable ID avoids stale tags.
+          IMAGE_ID=$(sudo podman image inspect --format '{{.Id}}' localhost/mjolnir:latest)
+          sudo podman push "containers-storage:${IMAGE_ID}" \
+            "docker://ghcr.io/${{ github.repository_owner }}/mjolnir:latest"
 
       - name: Sign and attest
         if: github.event_name != 'pull_request'
