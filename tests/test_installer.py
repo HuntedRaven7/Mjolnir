@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,13 @@ binary = Path(tempfile.gettempdir()) / "mjolnir-installer-test"
 
 
 def main() -> int:
+    # Go is not present on every build host (CI installs it explicitly).
+    # Skip the installer build smoke-test rather than failing `just test` when
+    # the toolchain is absent; the ISO workflow exercises it where it matters.
+    if shutil.which(GO) is None:
+        print(f"SKIP: installer check ({GO} not installed)")
+        return 0
+
     build = subprocess.run(
         [GO, "build", "-o", str(binary), "."],
         cwd=ROOT / "installer",
