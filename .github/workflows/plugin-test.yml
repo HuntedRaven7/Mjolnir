@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create Kind cluster
-        uses: helm/kind-action@dd4fa0671be1190aee1d14eacf7436986929bd18 # v1.10.0
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
           cluster_name: mjolnir-plugin
 
