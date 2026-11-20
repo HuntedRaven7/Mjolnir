@@ -1,0 +1,10 @@
+[Unit]
+Description=Mjolnir fleet Varlink socket
+PartOf=mjolnir-fleet.service
+
+[Socket]
+ListenStream=/run/varlink/registry/io.mjolnir.Fleet
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

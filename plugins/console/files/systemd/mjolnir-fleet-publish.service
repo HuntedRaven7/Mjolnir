@@ -1,0 +1,13 @@
+[Unit]
+Description=Publish Mjolnir fleet status to Kubernetes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ImportCredential=fleet-kubeconfig
+ImportCredential=role
+ExecStart=/usr/bin/mjolnir-fleet publish
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

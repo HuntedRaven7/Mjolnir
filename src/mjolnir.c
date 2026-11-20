@@ -204,7 +204,11 @@ static int cmd_apply(void) {
     if (cmd_wait_api() != 0)
         return 1;
     const char *kubeconfig = ADMIN_CONF;
-    const char *dirs[] = { MANIFEST_DIR "/cilium", MANIFEST_DIR "/kubestellar" };
+    const char *dirs[] = {
+        MANIFEST_DIR "/crds",
+        MANIFEST_DIR "/cilium",
+        MANIFEST_DIR "/kubestellar"
+    };
     for (size_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++) {
         const char *argv[] = {
             "/usr/bin/kubectl", "--kubeconfig", kubeconfig,

@@ -1,0 +1,122 @@
+{
+  "version": "kc-mission-v1",
+  "name": "mjolnir-bootc-fleet-operations",
+  "missionClass": "runbook",
+  "author": "Mjolnir",
+  "authorGithub": "HuntedRaven7",
+  "mission": {
+    "title": "Mjolnir bootc fleet operations",
+    "description": "Inspect, upgrade and reboot a fleet of Mjolnir bootc nodes from KubeStellar Console.",
+    "type": "operations",
+    "status": "completed",
+    "estimatedMinutes": 15,
+    "steps": [
+      {
+        "id": "step-01-crd",
+        "title": "Verify the MjolnirNode CRD and publisher",
+        "description": "Confirm the CRD is installed and every node publishes status.",
+        "commands": [
+          "kubectl get crd mjolnirnodes.mjolnir.kubestellar.io",
+          "kubectl get mjolnirnodes -o wide"
+        ],
+        "validation": {
+          "command": "kubectl get mjolnirnodes -o jsonpath='{.items[*].metadata.name}'",
+          "expected": "at least one node name"
+        },
+        "failureHandling": "Apply plugins/console/crds/mjolnirnodes.yaml and check the mjolnir-fleet-publish timer on the node."
+      },
+      {
+        "id": "step-02-status",
+        "title": "Read live node status over mTLS Varlink",
+        "description": "The fleet service exposes io.mjolnir.Fleet over varlink-httpd on port 1031. Use a client certificate trusted by the node.",
+        "commands": [
+          "varlinkctl call --show-type https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}'",
+          "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.WifiStatus '{}'"
+        ],
+        "validation": {
+          "command": "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}' | jq -r .version",
+          "expected": "the deployed image version"
+        },
+        "failureHandling": "Check varlink-httpd.socket and mjolnir-fleet-varlink.socket on the node and verify client cert trust."
+      },
+      {
+        "id": "step-03-upgrade",
+        "title": "Queue a bootc update without rebooting",
+        "description": "Download and stage a new image; the node reports updateAvailable=true after staging.",
+        "commands": [
+          "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Upgrade '{}'",
+          "kubectl get mjolnirnode NODE -o jsonpath='{.status.updateAvailable}'"
+        ],
+        "validation": {
+          "command": "kubectl get mjolnirnode NODE -o jsonpath='{.status.pendingDeployment}'",
+          "expected": "the staged image reference"
+        }
+      },
+      {
+        "id": "step-04-reboot",
+        "title": "Drain and reboot an updated node",
+        "description": "Cordon and drain the node, clear any reboot lock, then request a reboot through Varlink.",
+        "commands": [
+          "kubectl drain NODE --ignore-daemonsets --delete-emptydir-data",
+          "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.ClearRebootLock '{}'",
+          "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Reboot '{}'",
+          "kubectl uncordon NODE"
+        ],
+        "validation": {
+          "command": "kubectl get mjolnirnode NODE -o jsonpath='{.status.version}'",
+          "expected": "the new image version after the node returns"
+        }
+      },
+      {
+        "id": "step-05-token",
+        "title": "Rotate the worker join token (control plane only)",
+        "description": "Create a fresh bootstrap token and update the provisioning credential on new workers.",
+        "commands": [
+          "varlinkctl call https://CONTROLPLANE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.RotateJoinToken '{}'"
+        ],
+        "validation": {
+          "command": "kubeadm token list",
+          "expected": "a new unused token with a TTL"
+        }
+      }
+    ],
+    "resolution": {
+      "summary": "All Mjolnir nodes report status as MjolnirNode resources, updates are staged through Varlink, and reboots are coordinated with Kubernetes drains.",
+      "codeSnippets": [
+        "kubectl get mjolnirnodes -o wide",
+        "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}'"
+      ]
+    },
+    "uninstall": [],
+    "upgrade": [],
+    "troubleshooting": [
+      {
+        "symptom": "No MjolnirNode resources appear",
+        "action": "Check that the fleet-kubeconfig credential is provisioned and that mjolnir-fleet-publish.timer is active on the node."
+      }
+    ],
+    "references": [
+      "https://github.com/HuntedRaven7/Mjolnir/tree/main/plugins/console"
+    ]
+  },
+  "metadata": {
+    "tags": ["mjolnir", "bootc", "fleet", "varlink", "kubestellar"],
+    "difficulty": "intermediate",
+    "platform": "kubernetes",
+    "issueTypes": ["operations"],
+    "installMethods": ["kubectl", "varlinkctl"],
+    "targetResourceKinds": ["MjolnirNode"],
+    "supportedK8sVersions": ["1.32", "1.33", "1.34", "1.35"]
+  },
+  "prerequisites": {
+    "kubernetes": ">=1.32",
+    "tools": ["kubectl", "varlinkctl", "jq"],
+    "description": "A Mjolnir kubeadm cluster with the Console plugin CRD applied and mTLS client credentials for Varlink."
+  },
+  "security": {
+    "scannedAt": "",
+    "scannerVersion": "",
+    "sanitized": false,
+    "findings": []
+  }
+}

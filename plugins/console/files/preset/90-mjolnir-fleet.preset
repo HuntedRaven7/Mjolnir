@@ -1,0 +1,2 @@
+enable mjolnir-fleet-varlink.socket
+enable mjolnir-fleet-publish.timer

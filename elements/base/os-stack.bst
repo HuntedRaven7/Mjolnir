@@ -35,6 +35,10 @@ depends:
 # bootc (in-place upgrades and bootc container lint).
 - mgmt/bootc.bst
 
+# KubeStellar Console fleet plugin.
+- plugins/console/fleet.bst
+- plugins/console/files.bst
+
 # Mjolnir components.
 - k8s/binaries.bst
 - k8s/manifests.bst
