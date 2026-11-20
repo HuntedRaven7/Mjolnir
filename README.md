@@ -80,6 +80,9 @@ full pipeline.
 - `renovate.json` tracks Go modules, GitHub Actions and pinned source versions.
 - `scripts/update_pins.py` and a weekly workflow recompute source hashes/refs;
   see [docs/UPDATES.md](docs/UPDATES.md).
+- `testsuite/` adapts the projectbluefin/testsuite harness to our shell-less
+  image: a blocking QEMU boot/health/provenance gate on merge queue. See
+  [testsuite/README.md](testsuite/README.md).
 
 ## References
 

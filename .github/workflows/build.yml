@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
   workflow_dispatch:
 
 permissions: {}
@@ -92,6 +93,8 @@ jobs:
           max-layers: "128"
           source-date-epoch: auto
 
+      # On merge queue, the pushed :testing image is the gate target; the E2E
+      # job in e2e.yml runs as a separate required check against that ref.
       - name: Push image
         if: github.event_name != 'pull_request'
         run: |

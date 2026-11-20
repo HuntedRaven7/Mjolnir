@@ -1,0 +1,64 @@
+name: e2e
+
+# Blocking merge-queue gate. Adapted from projectbluefin/testsuite's wrapper
+# pattern, but drives our shell-less image over the serial console + Varlink
+# instead of injecting an SSH user into a disposable disk copy.
+on:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Image ref to test"
+        type: string
+        default: ghcr.io/HuntedRaven7/Mjolnir:testing
+
+permissions: {}
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: boot + health + provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cosign
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Resolve image
+        id: image
+        env:
+          INPUT_IMAGE: ${{ inputs.image }}
+        run: |
+          ref="${INPUT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY%%/*}/$(basename "$GITHUB_REPOSITORY"):testing}"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Run E2E checks
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: sudo -E ./testsuite/e2e.sh
+
+      - name: Upload serial log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-serial-log
+          path: build/e2e/serial.log
+          if-no-files-found: ignore
