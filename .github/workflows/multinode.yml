@@ -44,5 +44,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: multinode-sync-agent-log
-          path: /tmp/opencode/mjolnir-sync-agent.log
+          path: ${{ runner.temp }}/mjolnir-multinode/sync-agent.log
           if-no-files-found: ignore

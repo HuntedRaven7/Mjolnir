@@ -18,9 +18,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CRD="$ROOT/plugins/console/crds/mjolnirnodes.yaml"
 AGENT="$(dirname "${BASH_SOURCE[0]}")/sync-agent.sh"
-WDS_KC="/tmp/opencode/mjolnir-wds.kubeconfig"
-ITS_KC="/tmp/opencode/mjolnir-its.kubeconfig"
-AGENT_LOG="/tmp/opencode/mjolnir-sync-agent.log"
+# Use a dedicated temp dir (RUNNER_TEMP on Actions, /tmp locally). Never hardcode
+# an OpenCode-specific path: it does not exist on GitHub-hosted runners.
+WORKDIR="${RUNNER_TEMP:-/tmp}/mjolnir-multinode"
+mkdir -p "$WORKDIR"
+WDS_KC="$WORKDIR/wds.kubeconfig"
+ITS_KC="$WORKDIR/its.kubeconfig"
+AGENT_LOG="$WORKDIR/sync-agent.log"
 AGENT_PID=""
 
 for tool in kubectl kind python3; do
@@ -67,7 +71,7 @@ pass "two nodes created in ITS"
 
 echo "==> starting propagation agent"
 ITS_KUBECONFIG="$ITS_KC" WDS_KUBECONFIG="$WDS_KC" \
-  SYNC_DURATION=90 bash "$AGENT" >"$AGENT_LOG" 2>&1 &
+  SYNC_DURATION=180 bash "$AGENT" >"$AGENT_LOG" 2>&1 &
 AGENT_PID=$!
 pass "propagation agent started"
 
