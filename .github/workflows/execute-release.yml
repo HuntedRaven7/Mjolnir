@@ -1,0 +1,179 @@
+name: execute-release
+
+# Dakota-style stable promotion. No schedule: a maintainer decides when a
+# tested :testing image is ready. Dry-run by default; --apply (via `just
+# release --apply`) is required to mutate :stable. Promotion is by digest:
+# the exact signed image built from a testing commit is re-tagged, never
+# rebuilt. See docs/RELEASING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preflight only — resolve/verify/compare, skip promotion'
+        type: boolean
+        default: true
+      promote_sha:
+        description: 'Recovery only — full 40-char SHA of an already-tested commit'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+  packages: write
+
+concurrency:
+  group: mjolnir-execute-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/mjolnir
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: testing
+          fetch-depth: 0
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo jq >/dev/null
+
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.3'
+
+      # Resolve the candidate commit and confirm a successful build exists for
+      # that exact SHA. With no override this is testing HEAD.
+      - name: Resolve candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTE_SHA: ${{ inputs.promote_sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${PROMOTE_SHA}" ]; then
+            if ! [[ "${PROMOTE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::promote_sha must be a full 40-character lowercase SHA" >&2
+              exit 2
+            fi
+            SHA="${PROMOTE_SHA}"
+          else
+            SHA=$(git rev-parse HEAD)
+          fi
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Candidate: ${SHA}"
+
+          RUN=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/build.yml/runs?head_sha=${SHA}&status=success" \
+            --jq '.workflow_runs[0].id // empty')
+          if [ -z "${RUN}" ]; then
+            echo "::error::No successful build workflow run for ${SHA}; cannot promote" >&2
+            exit 1
+          fi
+          echo "run_id=${RUN}" >> "$GITHUB_OUTPUT"
+          echo "Successful build run: ${RUN}"
+
+      - name: Download tested digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ steps.candidate.outputs.run_id }}" \
+            -n mjolnir-digest -D digest
+          test -s digest/mjolnir-digest.txt
+
+      - name: Resolve and verify digest
+        id: digest
+        env:
+          DIGEST_FILE: digest/mjolnir-digest.txt
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          DIGEST=$(cat "${DIGEST_FILE}")
+          [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::invalid digest: ${DIGEST}" >&2; exit 1; }
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Verifying ${IMAGE}@${DIGEST}"
+          bash scripts/verify-image.sh "${IMAGE}" "${DIGEST}"
+
+      - name: Compare with current :stable
+        id: compare
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STABLE=""
+          if skopeo inspect --no-tags \
+              --creds "${GITHUB_ACTOR}:${GH_TOKEN}" \
+              "docker://${IMAGE}:stable" >/dev/null 2>&1; then
+            STABLE=$(skopeo inspect --no-tags \
+              --creds "${GITHUB_ACTOR}:${GH_TOKEN}" \
+              "docker://${IMAGE}:stable" | jq -r '.Digest')
+          fi
+          echo "stable_digest=${STABLE}" >> "$GITHUB_OUTPUT"
+          if [ -n "${STABLE}" ] && [ "${DIGEST}" = "${STABLE}" ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Already current: ${DIGEST}"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Promotion needed: ${DIGEST} (stable: ${STABLE:-none})"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "DRY RUN: verification complete; no promotion performed."
+          fi
+
+      - name: Promote digest to :stable
+        if: inputs.dry_run == false && steps.compare.outputs.should_release == 'true'
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          skopeo copy \
+            --src-creds "${GITHUB_ACTOR}:${GH_TOKEN}" \
+            --dest-creds "${GITHUB_ACTOR}:${GH_TOKEN}" \
+            "docker://${IMAGE}@${DIGEST}" "docker://${IMAGE}:stable"
+          echo "Promoted ${IMAGE}@${DIGEST} -> :stable"
+
+      - name: Move stable branch
+        if: inputs.dry_run == false && steps.compare.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          git push --force origin "${SHA}:refs/heads/stable"
+
+      - name: Create GitHub Release
+        if: inputs.dry_run == false && steps.compare.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          TAG="v$(date -u +%Y.%m.%d)-${SHA:0:7}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; skipping"
+            exit 0
+          fi
+          NOTES_FILE=$(mktemp)
+          cat > "${NOTES_FILE}" <<EOF
+          Stable Mjolnir release from testing commit \`${SHA}\`.
+
+          Image: \`${IMAGE}@${DIGEST}\`
+          Upgrade: \`bootc upgrade\` (origin \`${IMAGE}:stable\`)
+
+          See docs/RELEASING.md for the digest-promotion procedure.
+          EOF
+          gh release create "${TAG}" \
+            --target "${SHA}" \
+            --title "Mjolnir ${TAG}" \
+            --notes-file "${NOTES_FILE}"
+          echo "Created release ${TAG}"

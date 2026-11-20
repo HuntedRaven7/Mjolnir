@@ -127,5 +127,36 @@ repro:
     ./scripts/repro-check.sh
 
 # Diff the published image against the local build for PR comments.
-image-diff old="ghcr.io/HuntedRaven7/Mjolnir:latest" new="localhost/mjolnir:latest" out="pr-comment.md":
+image-diff old="ghcr.io/HuntedRaven7/Mjolnir:testing" new="localhost/mjolnir:latest" out="pr-comment.md":
     ./scripts/image-diff.sh "{{old}}" "{{new}}" "{{out}}"
+
+# Cut a stable release (dakota-style digest promotion). Dry-run by default:
+#   just release                       # preflight only
+#   just release --apply               # promote + cut GitHub Release
+#   just release --apply sha=<40-char> # recovery: promote a specific commit
+release *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    apply=false
+    sha=""
+    for arg in {{ARGS}}; do
+      case "$arg" in
+        --apply) apply=true ;;
+        sha=*) sha="${arg#sha=}" ;;
+        *) echo "usage: just release [--apply] [sha=<40-char-sha>]" >&2; exit 2 ;;
+      esac
+    done
+    if [ -n "$sha" ] && ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "sha must be a full 40-character lowercase SHA" >&2
+      exit 2
+    fi
+    mode="preflight (dry run)"
+    [ "$apply" = true ] && mode="APPLY (promote to :stable)"
+    echo "mode:      ${mode}"
+    echo "repo:      HuntedRaven7/Mjolnir"
+    echo "workflow:  execute-release.yml @ testing"
+    echo "candidate: ${sha:-testing HEAD}"
+    gh workflow run execute-release.yml --ref testing \
+      -f dry_run=$([ "$apply" = true ] && echo false || echo true) \
+      -f promote_sha="$sha"
+    echo "Dispatched. Watch with: gh run watch"

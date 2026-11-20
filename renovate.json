@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":semanticCommits"],
-  "baseBranchPatterns": ["main"],
+  "baseBranchPatterns": ["testing"],
   "rebaseWhen": "conflicted",
   "platformAutomerge": false,
   "vulnerabilityAlerts": { "enabled": false },

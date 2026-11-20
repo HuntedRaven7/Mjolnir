@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OLD="${1:-ghcr.io/HuntedRaven7/Mjolnir:latest}"
+OLD="${1:-ghcr.io/HuntedRaven7/Mjolnir:testing}"
 NEW="${2:-localhost/mjolnir:latest}"
 OUT="${3:-pr-comment.md}"
 WORK=$(mktemp -d)

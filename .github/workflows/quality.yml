@@ -2,7 +2,7 @@ name: quality
 
 on:
   pull_request:
-    branches: [main]
+    branches: [testing]
   schedule:
     - cron: "23 5 * * 1"   # weekly reproducibility check
   workflow_dispatch:

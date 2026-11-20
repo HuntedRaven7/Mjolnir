@@ -2,9 +2,9 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [testing]
   pull_request:
-    branches: [main]
+    branches: [testing]
   merge_group:
   workflow_dispatch:
 
@@ -120,7 +120,9 @@ jobs:
       # job in e2e.yml runs as a separate required check against that ref.
       - name: Push image
         if: github.event_name != 'pull_request'
+        id: push
         run: |
+          set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io \
             -u "${{ github.actor }}" --password-stdin
           # Use explicit docker:// transport. After chunka rechunks in place,
@@ -128,8 +130,23 @@ jobs:
           # name ("unknown transport ghcr.io/..."); the explicit prefix avoids
           # that, and resolving the source by immutable ID avoids stale tags.
           IMAGE_ID=$(sudo podman image inspect --format '{{.Id}}' localhost/mjolnir:latest)
-          sudo podman push "containers-storage:${IMAGE_ID}" \
-            "docker://ghcr.io/${{ github.repository_owner }}/mjolnir:latest"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/mjolnir"
+          # :testing is the stream tag promoted to :stable on release. :latest
+          # stays as a compatibility alias for existing installer defaults.
+          sudo podman push --digestfile /tmp/mjolnir-digest.txt \
+            "containers-storage:${IMAGE_ID}" "docker://${IMAGE}:testing"
+          sudo podman push "containers-storage:${IMAGE_ID}" "docker://${IMAGE}:latest"
+          DIGEST=$(cat /tmp/mjolnir-digest.txt)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Pushed ${IMAGE}@${DIGEST}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mjolnir-digest
+          path: /tmp/mjolnir-digest.txt
+          retention-days: 90
 
       - name: Image size/layer budget
         run: python3 tests/test_image_budget.py
@@ -139,6 +156,7 @@ jobs:
         uses: projectbluefin/actions/bootc-build/sign-and-publish@v1
         with:
           image: ghcr.io/${{ github.repository_owner }}/mjolnir
+          digest: ${{ steps.push.outputs.digest }}
           signing-mode: keyless
           # The BST-native SPDX SBOM is produced by the `sbom` job in quality.yml
           # (it captures junctioned FSDK sources that a syft scan cannot see).
@@ -146,7 +164,7 @@ jobs:
           push-attestation: 'true'
           # The action's default regexp only matches projectbluefin orgs; it
           # would fail to verify our own keyless signature.
-          certificate-identity-regexp: '^https://github\.com/${{ github.repository_owner }}/Mjolnir/\.github/workflows/build\.yml@refs/heads/(main|gh-readonly-queue/main/.+)$'
+          certificate-identity-regexp: '^https://github\.com/${{ github.repository_owner }}/Mjolnir/\.github/workflows/build\.yml@refs/heads/(testing|gh-readonly-queue/testing/.+)$'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           image-name: mjolnir
 

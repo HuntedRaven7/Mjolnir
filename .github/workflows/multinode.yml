@@ -5,9 +5,9 @@ name: multinode
 # between them, and that the Console fleet-list query returns both nodes.
 on:
   pull_request:
-    branches: [main]
+    branches: [testing]
   push:
-    branches: [main]
+    branches: [testing]
   merge_group:
   workflow_dispatch:
 
