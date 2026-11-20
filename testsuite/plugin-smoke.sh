@@ -20,7 +20,10 @@ $KUBECTL apply -f "$ROOT/plugins/console/crds/mjolnirnodes.yaml"
 $KUBECTL apply -f "$ROOT/plugins/console/rbac.yaml"
 pass "CRD and RBAC applied"
 
-echo "==> creating a synthetic MjolnirNode"
+echo "==> creating a synthetic MjolnirNode (spec only)"
+# The CRD has a status subresource, so `apply` ignores `status`. Write spec
+# first, then patch status through the subresource exactly as the fleet
+# publisher does at runtime.
 $KUBECTL apply -n "$NS" -f - <<'EOF'
 apiVersion: mjolnir.kubestellar.io/v1alpha1
 kind: MjolnirNode
@@ -29,30 +32,39 @@ metadata:
 spec:
   role: worker
   varlinkEndpoint: https://mjolnir-plugin-test:1031
-status:
-  image: ghcr.io/HuntedRaven7/Mjolnir:test
-  version: "26.11.1"
-  updateAvailable: true
-  pendingDeployment: ghcr.io/HuntedRaven7/Mjolnir:next
-  rebootRequired: false
-  rebootLock: false
-  rebootDeferred: false
-  lastCheck: "2026-11-20T00:00:00Z"
-  wifi:
-    ssid: test-net
-    interface: wlan0
-    state: UP
-    signal: "-55 dBm"
 EOF
 pass "synthetic MjolnirNode created"
 
+echo "==> writing status through the status subresource"
+$KUBECTL patch mjolnirnode mjolnir-plugin-test --subresource=status --type=merge -p '{
+  "status": {
+    "image": "ghcr.io/HuntedRaven7/Mjolnir:test",
+    "version": "26.11.1",
+    "updateAvailable": true,
+    "pendingDeployment": "ghcr.io/HuntedRaven7/Mjolnir:next",
+    "rebootRequired": false,
+    "rebootLock": false,
+    "rebootDeferred": false,
+    "lastCheck": "2026-11-20T00:00:00Z",
+    "attestation": {"method": "software", "bootId": "test-boot-id"},
+    "wifi": {
+      "ssid": "test-net",
+      "interface": "wlan0",
+      "state": "UP",
+      "signal": "-55 dBm"
+    }
+  }
+}' >/dev/null
+pass "status written via subresource"
+
 echo "==> verifying the CRD schema accepted all status fields"
 NODE=$($KUBECTL get mjolnirnode mjolnir-plugin-test -o json)
-for field in version updateAvailable pendingDeployment rebootRequired rebootLock wifi; do
+for field in version updateAvailable pendingDeployment rebootRequired rebootLock wifi attestation; do
   echo "$NODE" | grep -q "\"$field\"" || fail "missing status field: $field"
 done
 echo "$NODE" | grep -q '"ssid": "test-net"' || fail "wifi.ssid not persisted"
-pass "all status fields (including WiFi) round-trip through the CRD"
+echo "$NODE" | grep -q '"method": "software"' || fail "attestation.method not persisted"
+pass "all status fields (including WiFi and attestation) round-trip through the CRD"
 
 echo "==> verifying the card's data query shape"
 # The Tier 2 card calls /api/mcp/custom-resources?group=...&resource=mjolnirnodes.

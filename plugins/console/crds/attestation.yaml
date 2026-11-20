@@ -3,7 +3,7 @@
 # The `verified` field is set by the fleet controller, never by the node.
 type: object
 properties:
-  method: { type: string, enum: [tpm2-quote, software, none] }
+  method: { type: string, enum: [tpm2, software, none] }
   verified: { type: boolean }
   nonce: { type: string }
   timestamp: { type: string, format: date-time }
