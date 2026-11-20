@@ -1,0 +1,16 @@
+[Unit]
+Description=kubeadm worker node join
+After=network-online.target containerd.service
+Wants=network-online.target
+Requires=containerd.service
+ConditionPathExists=!/etc/kubernetes/kubelet.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10s
+ExecStart=/usr/bin/mjolnir-helper join
+
+[Install]
+WantedBy=multi-user.target

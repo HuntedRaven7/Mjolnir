@@ -1,0 +1,98 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Static checks
+        run: python3 tests/test_units.py
+      - name: BuildStream graph
+        run: just validate
+
+  image:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # projectbluefin/actions: runner and artifact-level helpers. The
+      # dnf/Containerfile-specific actions are intentionally not used.
+      - uses: projectbluefin/actions/bootc-build/setup-runner@v1
+        with:
+          storage-backend: btrfs
+          native-overlay: "true"
+          install-tools: '["just", "cosign", "oras"]'
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build and export image
+        run: |
+          just bst build oci/mjolnir.bst
+          just export
+
+      - name: Image content checks
+        run: just test
+
+      - name: bootc lint
+        run: just lint
+
+      - name: Scan image
+        uses: projectbluefin/actions/bootc-build/scan-image@v1
+        continue-on-error: true
+        with:
+          image: localhost/mjolnir:latest
+          severity-threshold: CRITICAL
+          exit-code: '0'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+          sudo podman push localhost/mjolnir:latest \
+            ghcr.io/${{ github.repository_owner }}/mjolnir:latest
+
+      - name: Sign and attest
+        if: github.event_name != 'pull_request'
+        uses: projectbluefin/actions/bootc-build/sign-and-publish@v1
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/mjolnir
+          signing-mode: keyless
+          generate-sbom: 'true'
+          push-attestation: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          image-name: mjolnir
+
+      - name: Prune old images
+        if: github.event_name != 'pull_request'
+        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@v1
+        with:
+          image-name: mjolnir
+          github-token: ${{ secrets.GITHUB_TOKEN }}

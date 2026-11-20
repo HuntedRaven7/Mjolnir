@@ -1,0 +1,35 @@
+version = 3
+
+root = "/var/lib/containerd"
+state = "/run/containerd"
+
+[grpc]
+  address = "/run/containerd/containerd.sock"
+
+[plugins.'io.containerd.cri.v1.images'.paused_images]
+  image_pull_progress_timeout = "5m"
+
+[plugins.'io.containerd.cri.v1.runtime']
+  cgroup_name = "systemd"
+  disable_hugetlb_controller = false
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd]
+  default_runtime_name = "runc"
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+  pod_annotations = ["io.kubernetes.cri.*"]
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+  BinaryName = "/usr/bin/runc"
+  SystemdCgroup = true
+
+[plugins.'io.containerd.cri.v1.images']
+  snapshotter = "overlayfs"
+
+[plugins.'io.containerd.cri.v1.runtime'.cni]
+  bin_dirs = ["/opt/cni/bin", "/usr/libexec/cni"]
+  conf_dir = "/etc/cni/net.d"
+
+[plugins.'io.containerd.cri.v1.images'.registry]
+  config_path = "/etc/containerd/certs.d"

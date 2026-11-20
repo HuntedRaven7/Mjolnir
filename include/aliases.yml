@@ -1,0 +1,9 @@
+aliases:
+  github: https://github.com/
+  github_files: https://github.com/
+  github_raw: https://raw.githubusercontent.com/
+  gitlab: https://gitlab.com/
+  kernel: https://git.kernel.org/pub/scm/
+  k8s: https://dl.k8s.io/release/
+  crates: https://static.crates.io/
+  pypi: https://files.pythonhosted.org/packages/

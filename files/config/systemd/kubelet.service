@@ -1,0 +1,26 @@
+[Unit]
+Description=kubelet: Kubernetes node agent
+Documentation=https://kubernetes.io/docs/home/
+After=containerd.service
+Requires=containerd.service
+
+[Service]
+ExecStartPre=/usr/bin/mkdir -p /var/lib/kubelet /var/lib/kubelet/volumeplugins
+ExecStartPre=/usr/bin/test -f /var/lib/kubelet/config.yaml
+EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+ExecStart=/usr/bin/kubelet \
+  --config=/var/lib/kubelet/config.yaml \
+  --kubeconfig=/var/lib/kubelet/kubeconfig \
+  --volume-plugin-dir=/var/lib/kubelet/volumeplugins \
+  $KUBELET_KUBEADM_ARGS
+Restart=always
+RestartSec=10s
+KillMode=process
+Delegate=yes
+TasksMax=infinity
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

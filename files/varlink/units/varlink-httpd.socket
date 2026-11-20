@@ -1,0 +1,11 @@
+[Unit]
+Description=Varlink HTTP bridge socket
+PartOf=varlink-httpd.service
+
+[Socket]
+ListenStream=0.0.0.0:1031
+SocketMode=0600
+NoDelay=yes
+
+[Install]
+WantedBy=sockets.target

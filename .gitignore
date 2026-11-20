@@ -1,0 +1,32 @@
+# BuildStream / build outputs
+/.bst/
+/.build-out/
+/dist/
+/*.ociarchive
+/*.tar
+/rootfs/
+
+# Generated disk images
+*.raw
+*.qcow2
+*.img
+*.raw.zst
+
+# Local keys / provisioning secrets
+/files/boot-keys/
+/files/keys/
+*.pem
+*.key
+*.psk
+
+# Python / test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Editor / OS noise
+.DS_Store
+*.swp

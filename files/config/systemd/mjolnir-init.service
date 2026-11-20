@@ -1,0 +1,16 @@
+[Unit]
+Description=kubeadm control-plane initialization
+After=network-online.target containerd.service
+Wants=network-online.target
+Requires=containerd.service
+ConditionPathExists=!/etc/kubernetes/admin.conf
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10s
+ExecStart=/usr/bin/mjolnir-helper init
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+enable containerd.service
+enable kubelet.service
+enable mjolnir-wifi.service
+enable mjolnir-init.service
+enable mjolnir-join.service
+enable mjolnir-apply.service
+enable mjolnir-reboot.timer
+enable varlink-httpd.socket
+enable systemd-networkd.service
+enable systemd-resolved.service
+enable iwd.service

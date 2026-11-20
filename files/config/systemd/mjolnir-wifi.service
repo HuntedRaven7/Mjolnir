@@ -1,0 +1,12 @@
+[Unit]
+Description=Provision iwd WiFi client credentials
+Before=iwd.service
+ConditionPathExists=/usr/libexec/iwd
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/mjolnir-helper wifi
+
+[Install]
+WantedBy=multi-user.target

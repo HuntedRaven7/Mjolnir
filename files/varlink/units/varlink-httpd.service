@@ -1,0 +1,24 @@
+[Unit]
+Description=Varlink HTTP bridge (mTLS)
+Documentation=https://github.com/systemd/varlink-http-bridge
+After=network.target
+
+[Service]
+Type=simple
+# The client CA is delivered as a systemd credential at provisioning time.
+# --auth=none disables per-request auth; mTLS alone authenticates every client.
+ImportCredential=varlink-httpd.tls.trust
+ExecStart=/usr/bin/varlink-httpd --auth=none --require-mtls
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/
+ReadWritePaths=/var/lib/varlink-httpd
+StateDirectory=varlink-httpd
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

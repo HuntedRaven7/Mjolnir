@@ -1,0 +1,11 @@
+The KubeStellar manifests in kubestellar/ are derived from
+projectbluefin/server (files/homelab/addons/31-kubestellar-full and
+30-kubestellar-console), Apache-2.0 licensed:
+
+  https://github.com/projectbluefin/server
+
+All container image references are pinned by digest. Do not add a mutable tag.
+
+The Cilium manifest in cilium/ was rendered from the cilium Helm chart v1.20.5
+(sha256:0c7592eb75179ecf46dd3ec22145916f0164c4401214ea15afb5b230b1d11a21)
+with kubeProxyReplacement enabled.
