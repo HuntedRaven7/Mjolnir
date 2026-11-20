@@ -27,9 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          python-version: '3.12'
+      # python3 is preinstalled on ubuntu-24.04 and the harness uses only the
+      # stdlib (json/sys), so no setup-python step (and no action pin) is needed.
 
       - name: Create kind clusters
         uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
