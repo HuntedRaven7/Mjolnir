@@ -24,7 +24,13 @@ from the runner host.
 - `e2e.sh` — host-side QEMU boot + checks (invoked by CI and locally).
 - `features/*.feature` — behave-style scenario descriptions (documentation of
   intent; the shell script is the executable source of truth for now).
-- `.github/workflows/e2e.yml` in the repo root wires this into merge queue.
+- `multinode/` — kind-based KubeStellar WDS↔ITS propagation test (no QEMU),
+  run by `.github/workflows/multinode.yml` on `testing`.
+
+`.github/workflows/e2e.yml` triggers on `merge_group` and manual dispatch. It is
+written as a blocking merge-queue gate, but merge queue is **not yet enabled**:
+the workflow has never run. The kind-based plugin and multinode tests are the
+currently-enforced gates.
 
 ## Running locally
 
@@ -32,8 +38,8 @@ Requires root (bootc install needs a real root user namespace), QEMU/KVM and
 `cosign`:
 
 ```sh
-IMAGE=ghcr.io/HuntedRaven7/Mjolnir:latest sudo ./testsuite/e2e.sh
+IMAGE=ghcr.io/HuntedRaven7/Mjolnir:testing sudo ./testsuite/e2e.sh
 ```
 
-CI runs the same script with a published `:testing` image as a merge-queue
-gate; failures block the merge.
+CI uses the published `:testing` image. See `docs/RELEASING.md` for how a
+tested `:testing` digest is promoted to `:stable`.

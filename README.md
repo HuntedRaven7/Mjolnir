@@ -84,8 +84,23 @@ full pipeline.
 - `scripts/update_pins.py` and a weekly workflow recompute source hashes/refs;
   see [docs/UPDATES.md](docs/UPDATES.md).
 - `testsuite/` adapts the projectbluefin/testsuite harness to our shell-less
-  image: a blocking QEMU boot/health/provenance gate on merge queue. See
+  image: a QEMU boot/health/provenance check (merge-queue gate, not yet enabled)
+  plus a kind-based multinode propagation test that runs on `testing`. See
   [testsuite/README.md](testsuite/README.md).
+
+## Releases
+
+Development lands on the `testing` branch and publishes a signed `:testing`
+image. Stable is cut on demand by promoting a tested digest — never by
+rebuilding. `main` is a historical pointer.
+
+```sh
+just release          # preflight: verify the candidate digest, compare to :stable
+just release --apply  # promote to :stable and cut a GitHub Release
+```
+
+See [docs/RELEASING.md](docs/RELEASING.md) for the full cycle, recovery by SHA,
+and rollback.
 
 ## References
 

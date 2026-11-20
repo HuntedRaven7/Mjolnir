@@ -32,15 +32,20 @@ What preflight does:
 1. Resolves the candidate commit (testing HEAD unless `sha=` is given).
 2. Confirms a successful `build` workflow run exists for that exact SHA.
 3. Resolves the `:testing` image digest from that run's artifact.
-4. Verifies the cosign keyless signature and SPDX attestation.
+4. Verifies the cosign keyless signature and SPDX attestation with
+   `scripts/verify-image.sh`.
 5. Compares the candidate digest with the current `:stable` digest and reports
    whether promotion is needed.
 
 What `--apply` additionally does:
 
-6. Re-tags the **exact verified digest** as `:stable` (no rebuild, no new layer).
+6. Re-tags the **exact verified digest** as `:stable` with `skopeo copy` (no
+   rebuild, no new layer).
 7. Moves the `stable` Git branch to the candidate commit.
-8. Creates a GitHub Release with a Conventional-Commits changelog and the SBOM.
+8. Creates a GitHub Release tagged `v<YYYY.MM.DD>-<short-sha>` whose notes
+   record the promoted digest, image reference and upgrade command. The full
+   commit history is available from the tag's target; automated changelog and
+   SBOM attachment are not yet implemented.
 
 If `:stable` already equals the candidate digest, promotion is a successful
 no-op. A missing or unsigned candidate fails the release.

@@ -7,7 +7,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build/e2e"
-IMAGE="${IMAGE:-ghcr.io/HuntedRaven7/Mjolnir:latest}"
+IMAGE="${IMAGE:-ghcr.io/HuntedRaven7/Mjolnir:testing}"
 DISK="$BUILD/disk.raw"
 SERIAL="$BUILD/serial.log"
 PIDFILE="$BUILD/qemu.pid"

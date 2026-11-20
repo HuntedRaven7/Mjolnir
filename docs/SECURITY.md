@@ -13,9 +13,14 @@ Verify a published image with `scripts/verify-image.sh IMAGE DIGEST`:
 - legacy `.sig` tag presence (bootc/podman compatibility)
 - SPDX v2.3 attestation when available
 
-`sign-and-publish@v1` is configured with `generate-sbom: false` and an explicit
+`sign-and-publish@v1` is configured with `generate-sbom: false`, signs the
+immutable digest pushed by the build, and uses an explicit
 `certificate-identity-regexp` because its default regexp only matches
 projectbluefin orgs.
+
+Promotion to `:stable` **re-verifies** the signature and SPDX attestation on
+that exact digest before mutating the tag (see `docs/RELEASING.md`). An
+unsigned or unattested `:testing` image can never become `:stable`.
 
 ## Sealed boot (signed UKI + composefs)
 

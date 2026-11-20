@@ -116,8 +116,9 @@ jobs:
           max-layers: "128"
           source-date-epoch: auto
 
-      # On merge queue, the pushed :testing image is the gate target; the E2E
-      # job in e2e.yml runs as a separate required check against that ref.
+      # The pushed :testing image is the candidate for the manual :stable
+      # promotion in execute-release.yml. The E2E job in e2e.yml is written to
+      # test it as well, but merge queue is not enabled yet.
       - name: Push image
         if: github.event_name != 'pull_request'
         id: push

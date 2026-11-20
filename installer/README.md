@@ -14,7 +14,7 @@ Host prerequisites: `go`, `podman`, `cpio`, `gzip`, `xz`, `mtools`,
 `squashfs-tools`, `xorriso` and systemd-boot EFI binaries.
 
 ```sh
-IMAGE=ghcr.io/HuntedRaven7/Mjolnir:latest ./installer/build-iso.sh
+IMAGE=ghcr.io/HuntedRaven7/Mjolnir:stable ./installer/build-iso.sh
 ```
 
 Output: `dist/mjolnir-installer-amd64.iso` (set `ARCH=arm64` for aarch64).
@@ -24,7 +24,7 @@ Output: `dist/mjolnir-installer-amd64.iso` (set `ARCH=arm64` for aarch64).
 Boot the ISO. `mjolnir-installer.service` starts the installer on `/dev/console`.
 It prompts for:
 
-- image reference (default `ghcr.io/HuntedRaven7/Mjolnir:latest`)
+- image reference (default `ghcr.io/HuntedRaven7/Mjolnir:stable`)
 - WiFi SSID and WPA PSK (optional; writes a NetworkManager keyfile)
 - private registry user/token (optional; piped to `podman login`)
 - node role (`control-plane` or `worker`)
@@ -39,7 +39,7 @@ Pass `--config <file>` to skip prompts for values set in the JSON:
 
 ```json
 {
-  "image": "ghcr.io/HuntedRaven7/Mjolnir:latest",
+  "image": "ghcr.io/HuntedRaven7/Mjolnir:stable",
   "disk": "/dev/vda",
   "role": "worker",
   "hostname": "mjolnir-1",
