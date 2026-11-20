@@ -71,6 +71,9 @@ spec:
                       type: object
                       properties:
                         peHashSha256: { type: string }
+                        path: { type: string }
+                    # bootc composefs digest (v1-sha512-12:<128 hex>), not a
+                    # dm-verity root hash; kept name for compatibility.
                     usrVerityRootHash: { type: string }
                 wifi:
                   type: object

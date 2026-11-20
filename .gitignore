@@ -13,7 +13,8 @@
 *.raw.zst
 
 # Local keys / provisioning secrets
-/files/boot-keys/
+/files/boot-keys/*
+!/files/boot-keys/README.md
 /files/keys/
 *.pem
 *.key

@@ -116,6 +116,9 @@ jobs:
           sudo podman push "containers-storage:${IMAGE_ID}" \
             "docker://ghcr.io/${{ github.repository_owner }}/mjolnir:latest"
 
+      - name: Image size/layer budget
+        run: python3 tests/test_image_budget.py
+
       - name: Sign and attest
         if: github.event_name != 'pull_request'
         uses: projectbluefin/actions/bootc-build/sign-and-publish@v1

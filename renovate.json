@@ -74,6 +74,13 @@
     }
   ],
 
+  "postUpgradeTasks": {
+    "description": "Recompute sha256 pins for version/digest bumps so version keys and hashes stay in sync in the same PR.",
+    "commands": ["python3 scripts/update_pins.py"],
+    "fileFilters": ["**/versions.yml"],
+    "executionMode": "update"
+  },
+
   "packageRules": [
     {
       "description": "SHA-pin GitHub Actions; only pin/digest bumps auto-merge",

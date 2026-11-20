@@ -204,6 +204,7 @@ func install(c *config, disk string, r runner) error {
 		"--security-opt", "label=type:unconfined_t",
 		c.Image,
 		"bootc", "install", "to-disk",
+		"--composefs-backend",
 		"--wipe", "--filesystem", c.Filesystem,
 		"--bootloader", "systemd",
 		"--karg", "systemd.firstboot=no",

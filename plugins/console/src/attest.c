@@ -10,6 +10,7 @@
 // verifier-side trust store. This report is evidence, not a hardware proof; the
 // fleet controller decides `verified`.
 #define _GNU_SOURCE
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -94,30 +95,56 @@ json_object *mjolnir_attestation(void) {
 
     // UKI PE hash and verity root hash from the booted system.
     json_object *uki = json_object_new_object();
-    const char *candidates[] = {
-        "/efi/EFI/Linux/mjolnir.efi",
-        "/boot/EFI/Linux/mjolnir.efi",
-        "/EFI/Linux/mjolnir.efi",
+    // bootc installs the UKI to EFI/Linux/bootc/bootc_composefs-<verity>.efi
+    // with a content-derived name; discover the single .efi on the ESP.
+    const char *dirs[] = {
+        "/efi/EFI/Linux/bootc", "/boot/EFI/Linux/bootc",
+        "/boot/efi/EFI/Linux/bootc", "/efi/EFI/Linux",
+        "/boot/EFI/Linux", "/boot/efi/EFI/Linux",
     };
-    for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
-        char *h = sha256_file(candidates[i]);
-        if (h) {
-            json_object_object_add(uki, "peHashSha256", json_object_new_string(h));
-            free(h);
-            break;
+    for (size_t d = 0; d < sizeof(dirs)/sizeof(dirs[0]); d++) {
+        DIR *dir = opendir(dirs[d]);
+        if (!dir) continue;
+        struct dirent *e;
+        while ((e = readdir(dir))) {
+            size_t n = strlen(e->d_name);
+            if (n > 4 && !strcmp(e->d_name + n - 4, ".efi")) {
+                char path[512];
+                snprintf(path, sizeof(path), "%s/%s", dirs[d], e->d_name);
+                char *h = sha256_file(path);
+                if (h) {
+                    json_object_object_add(uki, "peHashSha256", json_object_new_string(h));
+                    json_object_object_add(uki, "path", json_object_new_string(path));
+                    free(h);
+                    closedir(dir);
+                    break;
+                }
+            }
         }
+        if (json_object_object_get(uki, "peHashSha256")) { closedir(dir); break; }
+        closedir(dir);
     }
     json_object_object_add(root, "uki", uki);
 
     char *cmdline = slurp("/proc/cmdline", 8192);
     const char *verity = "";
     if (cmdline) {
-        const char *p = strstr(cmdline, "systemd.verity_root_hash=");
+        // bootc v1 writes composefs.digest=v1-sha512-12:<128 hex>, with a
+        // legacy `composefs=<hex>` fallback. Strip the optional `?` marker.
+        const char *p = strstr(cmdline, "composefs.digest=");
         if (p) {
-            p += strlen("systemd.verity_root_hash=");
-            char tmp[129] = {0};
+            p += strlen("composefs.digest=");
+        } else {
+            p = strstr(cmdline, "composefs=");
+            if (p) p += strlen("composefs=");
+        }
+        if (p) {
+            char tmp[160] = {0};
             size_t i = 0;
-            while (*p && *p != ' ' && *p != '\n' && i < 128) tmp[i++] = *p++;
+            while (*p && *p != ' ' && *p != '\n' && i < sizeof(tmp) - 1) {
+                if (*p != '?') tmp[i++] = *p;
+                p++;
+            }
             verity = strdup(tmp);
         }
     }

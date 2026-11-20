@@ -31,6 +31,9 @@ properties:
     type: object
     properties:
       peHashSha256: { type: string }
+      path: { type: string }
       pcr11Predicted: { type: string }
+  # bootc composefs digest (v1-sha512-12:<128 hex>), not a dm-verity root
+  # hash; the legacy field name is kept for compatibility.
   usrVerityRootHash: { type: string }
   imageDigest: { type: string }

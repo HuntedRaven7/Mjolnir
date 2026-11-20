@@ -11,6 +11,9 @@ build-depends:
 - filename: oci/layers/mjolnir.bst
   config:
     location: /layer
+- filename: uki/mjolnir-uki.bst
+  config:
+    location: /uki
 
 variables:
   strip-binaries: ''
@@ -22,6 +25,16 @@ config:
   - |
     set -eu
     root=/layer
+
+    # --- sealed boot: signed UKI with the composefs digest pinned -----------
+    # bootc's composefs backend detects /boot/EFI/Linux/*.efi and installs it
+    # to the ESP; the signed .cmdline carries the exact rootfs digest.
+    mkdir -p "${root}/boot/EFI/Linux"
+    cp -a /uki/boot/EFI/Linux/. "${root}/boot/EFI/Linux/"
+    mkdir -p "${root}/usr/lib/systemd/boot/efi"
+    cp -a /uki/usr/lib/systemd/boot/efi/. "${root}/usr/lib/systemd/boot/efi/"
+    mkdir -p "${root}/usr/share/mjolnir"
+    cp /uki/usr/share/mjolnir/composefs-digest.txt "${root}/usr/share/mjolnir/"
 
     # --- identity -----------------------------------------------------------
     mkdir -p "${root}/usr/lib" "${root}/etc"

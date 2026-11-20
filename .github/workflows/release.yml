@@ -1,0 +1,94 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v26.11.0)"
+        required: true
+        type: string
+      digest:
+        description: "Published image digest (sha256:...) to release"
+        required: true
+        type: string
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        uses: projectbluefin/actions/bootc-build/generate-release-notes@v1
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          output-file: CHANGELOG.md
+          config: cliff.toml
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download SPDX SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mjolnir-spdx
+          path: sbom_out
+        continue-on-error: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.3'
+
+      - name: Verify image signature and SBOM attestation
+        env:
+          INPUT_DIGEST: ${{ inputs.digest }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          DIGEST="$INPUT_DIGEST"
+          if [ -z "$DIGEST" ]; then
+            DIGEST=$(skopeo inspect --raw "docker://ghcr.io/${OWNER}/mjolnir:latest" \
+              | sha256sum | awk '{print "sha256:" $1}')
+          fi
+          echo "Verifying ${OWNER}/mjolnir@${DIGEST}"
+          bash scripts/verify-image.sh "ghcr.io/${OWNER}/mjolnir" "$DIGEST"
+
+      - name: Resolve digest from GHCR when triggered by a tag
+        id: resolve
+        env:
+          INPUT_DIGEST: ${{ inputs.digest }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ -n "$INPUT_DIGEST" ]; then
+            echo "digest=$INPUT_DIGEST" >> "$GITHUB_OUTPUT"
+          else
+            DIGEST=$(skopeo inspect --raw "docker://ghcr.io/${OWNER}/mjolnir:latest" \
+              | sha256sum | awk '{print "sha256:" $1}')
+            echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        uses: projectbluefin/actions/bootc-build/create-release@v1
+        with:
+          sbom-path: sbom_out/mjolnir.spdx.json
+          tag: ${{ inputs.tag || github.ref_name }}
+          title: "Mjolnir ${{ inputs.tag || github.ref_name }}"
+          image: ghcr.io/${{ github.repository_owner }}/mjolnir
+          digest: ${{ steps.resolve.outputs.digest }}
+          repo: ${{ github.repository }}
+          cert-identity-regexp: '^https://github\.com/${{ github.repository_owner }}/Mjolnir/\.github/workflows/build\.yml@refs/heads/(main|gh-readonly-queue/main/.+)$'
+          project-name: Mjolnir
+          badge-label: Alpha
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true

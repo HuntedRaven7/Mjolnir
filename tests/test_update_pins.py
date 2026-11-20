@@ -23,11 +23,9 @@ def main() -> int:
             print(f"missing version key: {key}")
             return 1
 
-    # Every binary sha256 must be 64 hex chars (or the documented arm64 placeholder).
+    # Every binary sha256 must be 64 hex chars.
     for key, value in versions.items():
         if key.endswith("-sha256"):
-            if value == "PLACEHOLDER":
-                continue
             if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
                 print(f"invalid sha256 for {key}: {value}")
                 return 1

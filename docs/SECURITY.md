@@ -17,6 +17,34 @@ Verify a published image with `scripts/verify-image.sh IMAGE DIGEST`:
 `certificate-identity-regexp` because its default regexp only matches
 projectbluefin orgs.
 
+## Sealed boot (signed UKI + composefs)
+
+Mjolnir builds a **signed, sealed Unified Kernel Image (UKI)** using
+`bootc container ukify` (see `elements/uki/mjolnir-uki.bst`):
+
+- `bootc container split-kernel-and-rootfs` extracts the kernel and initramfs
+  from the final rootfs layer.
+- `bootc container ukify` computes the **composefs digest of that exact rootfs**
+  and bakes it into the signed `.cmdline` section (`composefs.digest=v1-sha512-12:…`
+  plus the legacy `composefs=…` fallback). Our `kargs.d` entries, including
+  `systemd.volatile=yes`, are baked in too — no `--karg` is allowed at install
+  time because that would be unsigned.
+- The UKI is signed with `systemd-sbsign` (reproducible: uses `SOURCE_DATE_EPOCH`)
+  and verified with `sbverify`. systemd-boot is signed as
+  `systemd-boot*.efi.signed`, which `bootctl install` prefers.
+- `bootc install to-disk --composefs-backend --bootloader systemd` detects the
+  UKI at `/boot/EFI/Linux/`, validates its embedded digest against the image,
+  and installs it to the ESP. The digest, not a mutable path, is the root of trust.
+- Keys are never committed. `files/boot-keys/` is gitignored; CI writes the real
+  DB/PK/KEK keys from secrets before release builds. Dev builds generate
+  throwaway keys at build time via `scripts/gen-dev-keys.sh` (or on demand in the
+  `uki/boot-keys.bst` element). Signing elements are never in a runtime stack,
+  because their BST artifacts contain key material.
+
+On real hardware you must enroll the DB key in firmware (setup mode via
+`loader/keys/auto/`, or shim/MOK). The image alone cannot enroll keys for you —
+that is deliberately an out-of-band, physically local step.
+
 ## Measured boot attestation
 
 `mjolnir-fleet` produces an opportunistic attestation report
@@ -24,7 +52,12 @@ projectbluefin orgs.
 
 - SHA-256 PCR values from `/sys/class/tpm/tpm0/pcr-sha256/*` when a TPM is present
 - SHA-256 hash of the binary TCG event log
-- UKI PE hash and the `/usr` verity root hash from the booted system
+- SHA-256 hash of the booted signed UKI discovered on the ESP
+  (`EFI/Linux/bootc/bootc_composefs-*.efi`)
+- the pinned composefs digest parsed from `/proc/cmdline`
+  (`composefs.digest=v1-sha512-12:…`, with a `composefs=` fallback) — this is a
+  SHA-512 digest, not a dm-verity root hash; the legacy field name is kept for
+  CRD compatibility
 - boot ID and machine ID
 
 **This is evidence, not a hardware-backed proof.** Full `TPM2_Quote` with a

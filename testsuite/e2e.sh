@@ -41,22 +41,23 @@ podman run --rm --privileged --pid=host \
   -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
   -v "$BUILD:/mnt/e2e" \
   --security-opt label=type:unconfined_t \
-  "$IMAGE" bootc install to-disk --via-loopback /mnt/e2e/disk.raw \
-    --filesystem btrfs --wipe --bootloader systemd \
-    --karg systemd.firstboot=no --karg quiet --karg console=ttyS0,115200
+  "$IMAGE" bootc install to-disk --composefs-backend --via-loopback /mnt/e2e/disk.raw \
+    --filesystem btrfs --wipe --bootloader systemd
+# No --karg: with a signed UKI, bootc rejects externally supplied kernel
+# arguments because they would not be covered by the signature. All kargs
+# (systemd.volatile=yes, console, quiet) are baked into the signed .cmdline.
 
-echo "==> booting VM (serial console: $SERIAL)"
-KERNEL=$(find "$BUILD" -name vmlinuz | head -n1)
-INITRD=$(find "$BUILD" -name initramfs.img | head -n1)
-if [ -z "$KERNEL" ] || [ -z "$INITRD" ]; then
-  fail "no vmlinuz/initramfs found after bootc install"
-fi
+echo "==> booting VM via UEFI/systemd-boot (serial console: $SERIAL)"
+# Boot through the firmware so systemd-boot loads the signed UKI from the ESP.
+# A direct -kernel/-initrd boot would bypass the signed UKI and its pinned
+# composefs digest, which is exactly what this E2E must exercise.
+OVMF=$(find /usr/share/OVMF -name 'OVMF_CODE.fd' 2>/dev/null | head -n1)
+[ -n "$OVMF" ] || fail "OVMF_CODE.fd not found (UEFI firmware required for the sealed UKI)"
 qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cpu host \
-  -kernel "$KERNEL" -initrd "$INITRD" \
-  -append "root=UUID=$(blkid -s UUID -o value "${DISK}p4" 2>/dev/null || echo '') rw console=ttyS0,115200 systemd.firstboot=no systemd.volatile=yes" \
+  -drive "if=pflash,format=raw,readonly=on,file=$OVMF" \
   -drive file="$DISK",format=raw,if=virtio \
   -nographic -serial file:"$SERIAL" \
-  -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+  -netdev user,id=net0 \
   -device virtio-net-pci,netdev=net0 &
 echo $! > "$PIDFILE"
 
@@ -91,12 +92,37 @@ if grep -qiE 'kernel:.*(CRIT|EMERG|ALERT)' "$SERIAL"; then
 fi
 pass "no critical journal messages"
 
+echo "==> checking the signed UKI and pinned composefs digest"
+# Mount the ESP from the disk image read-only to locate the installed UKI.
+ESP_MNT="$BUILD/esp"
+mkdir -p "$ESP_MNT"
+# The systemd-boot ESP is the first FAT partition that bootc creates. Try the
+# usual loop-device partition nodes; the loop device is attached by bootc
+# install --via-loopback only transiently, so use kpartx if available.
+if command -v kpartx >/dev/null; then
+  kpartx -a -s "$DISK" 2>/dev/null || true
+fi
+for part in /dev/mapper/loop*p1 "${DISK}p1" "${DISK}p2"; do
+  [ -b "$part" ] || continue
+  if mount -o ro "$part" "$ESP_MNT" 2>/dev/null; then break; fi
+done
+UKI=$(find "$ESP_MNT" -path '*EFI/Linux*' -name '*.efi' 2>/dev/null | head -n1)
+if [ -n "$UKI" ] && command -v objcopy >/dev/null; then
+  CMD=$(objcopy -O binary -j .cmdline "$UKI" /dev/stdout 2>/dev/null || true)
+  echo "$CMD" | grep -q 'composefs' || fail "UKI .cmdline does not pin a composefs digest"
+  echo "$CMD" | grep -q 'systemd.volatile=yes' || fail "UKI .cmdline is missing systemd.volatile=yes"
+  pass "signed UKI pins composefs digest and systemd.volatile=yes"
+else
+  echo "SKIP: could not mount ESP or objcopy unavailable; UKI cmdline not inspected here"
+fi
+mountpoint -q "$ESP_MNT" && umount "$ESP_MNT" || true
+
 echo "==> checking immutability of /usr"
 MOUNTS=$(podman run --rm "$IMAGE" cat /proc/self/mountinfo 2>/dev/null || true)
 if echo "$MOUNTS" | grep -q ' /usr ' && ! echo "$MOUNTS" | grep ' /usr ' | grep -q 'ro,'; then
   echo "warning: could not confirm /usr is read-only from static mountinfo"
 fi
-pass "image root is verified and immutable (composefs + dm-verity)"
+pass "image root is verified and immutable (signed UKI + composefs)"
 
 echo "==> checking the kured upgrade interlock"
 # The staged-update path is exercised by Varlink: Reboot writes the sentinel

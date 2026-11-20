@@ -28,7 +28,7 @@ ELF binaries and static data; no script is shipped to the target.
 freedesktop-sdk (junction, pinned)
 └── base/runtime.bst            systemd, glibc, coreutils subset, util-linux subset
     └── base/sanitize.bst       removes shells/interpreters/SSH, SUID/SGID, file caps
-        ├── net/wifi.bst        NetworkManager + wpa-supplicant + firmware (client only)
+        ├── (wireless deps)     NetworkManager + wpa-supplicant + firmware (client only)
         ├── net/primary.bst     systemd-networkd, resolved
         ├── mgmt/varlink.bst    varlink-httpd (Rust), credstore integration
         ├── k8s/runtime.bst     kubeadm, kubelet, kubectl, crictl, containerd, runc, CNI
@@ -149,9 +149,9 @@ a Varlink interface.
 | 1 | No Shell + No SSH + No Language Interpreters | Build-time deny-list + CI assertion |
 | 2 | Signed Images Only | cosign keyless signature + bootc signature policy |
 | 3 | W^X | read-only `/usr`, `noexec` writable mounts |
-| 4 | Everything Measured | systemd PCR phase binding; full remote attestation is future work |
+| 4 | Everything Measured | signed UKI (PCR 11), composefs digest pinned in `.cmdline`, TPM PCR evidence; full `TPM2_Quote` attestation is future work |
 | 5 | No SUID/SGID or File Capabilities | stripped at build time; capabilities via units |
-| 6 | Integrity Is Mandatory | immutable root, pinned image digests, no mutable fetches |
+| 6 | Integrity Is Mandatory | signed UKI + composefs verity seal (no externally supplied kargs), pinned image digests, no mutable fetches |
 | 7 | Factory Reset Is Built In | `systemd-factory-reset` unit with sealed key |
 
 ## 10. Build and CI pipeline
@@ -174,11 +174,17 @@ dnf, `dnf-cache`, `rechunk`, `chunka`, `apply-pkg-intervals`) are not used.
 
 ## 11. Open issues
 
-- `varlink-httpd` for aarch64 is not built yet; the first image is x86_64 only.
-  `scripts/build-varlink.sh` is the reproducible build procedure.
-- Full remote attestation (reports/ledger) is out of scope for the first image.
+- `varlink-httpd` for both x86_64 and aarch64 is built reproducibly by
+  `scripts/build-varlink.sh`; both sha256 pins live in `include/versions.yml`.
+- Full remote attestation (reports/ledger, `TPM2_Quote`) is out of scope for the
+  first image. The signed UKI gives a stable PCR 11 measurement and the composefs
+  digest is pinned inside the signed `.cmdline`; `mjolnir-fleet status` reports
+  both as evidence.
 - Cilium and KubeStellar image digests must be refreshed when versions are bumped.
 - The FSDK kernel config needs Cilium's VXLAN/BPF options; verify with a boot test
   before treating the image as usable.
-- No hardware-safe Secure Boot key enrollment yet; the image is bootc-signed
-  but the boot chain is not yet UKI/verity sealed.
+- Secure Boot key **enrollment** on real hardware is a manual, out-of-band step.
+  The image ships a signed UKI plus a signed systemd-boot and `bootctl` accepts
+  the DB key from `loader/keys/auto/` in setup mode; see `docs/SECURITY.md`.
+  `bootc upgrade` with the sealed UKI must be validated on real hardware
+  (the highest-risk unknown — bootc marks sealed images experimental).

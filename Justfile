@@ -88,7 +88,7 @@ disk size="32G":
       -v "{{justfile_directory()}}:/data" \
       \
       "{{image_name}}:{{image_tag}}" \
-      bootc install to-disk --via-loopback /data/build/bootable.raw \
+      bootc install to-disk --composefs-backend --via-loopback /data/build/bootable.raw \
         --filesystem btrfs --wipe --bootloader systemd \
         --karg systemd.firstboot=no --karg quiet
 
