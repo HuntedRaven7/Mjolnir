@@ -19,12 +19,11 @@ config:
   install-commands:
   - |
     set -eu
-    mkdir -p "%{install-root}/boot-keys"
     if [ -f keys/DB.key ] && [ -f keys/DB.crt ]; then
-      cp -a keys/. "%{install-root}/boot-keys/"
+      cp -a keys/. "%{install-root}/"
     else
       echo "No Secure Boot keys supplied; generating throwaway dev keys" >&2
-      cd "%{install-root}/boot-keys"
+      cd "%{install-root}"
       gen() {
         openssl req -new -x509 -newkey rsa:2048 -nodes -keyout "$1.key" \
           -out "$1.crt" -days 3650 -subj "/CN=Mjolnir Dev $1" >/dev/null 2>&1
@@ -34,6 +33,6 @@ config:
       cp DB.crt VENDOR.crt
     fi
     for f in DB.key DB.crt VENDOR.key VENDOR.crt; do
-      test -f "%{install-root}/boot-keys/${f}"
-      chmod 0600 "%{install-root}/boot-keys/${f}"
+      test -f "%{install-root}/${f}"
+      chmod 0600 "%{install-root}/${f}"
     done

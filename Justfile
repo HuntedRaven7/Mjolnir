@@ -18,6 +18,15 @@ bst *ARGS:
       -w /src "{{bst2_image}}" \
       bash -c 'bst --colors "$@"' -- --no-interactive {{ARGS}}
 
+# Move the BuildStream cache to/from a GHCR OCI artifact. The cache dir is the
+# same one `bst` bind-mounts into the bst2 container, so restoring it here warms
+# every subsequent bst invocation. Failures are non-fatal by design.
+cache-pull:
+    scripts/bst-cache-oci.sh pull
+
+cache-push:
+    scripts/bst-cache-oci.sh push
+
 # Validate the element graph without building.
 validate:
     just bst show oci/mjolnir.bst

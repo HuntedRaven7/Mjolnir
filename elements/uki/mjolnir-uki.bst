@@ -17,7 +17,7 @@ build-depends:
 - filename: kernel/initramfs.bst
   config:
     location: /kernel
-- filename: oci/layers/mjolnir.bst
+- filename: oci/rootfs.bst
   config:
     location: /layer
 - filename: uki/boot-keys.bst
@@ -29,33 +29,58 @@ config:
   install-commands:
   - |
     set -eu
-    mkdir -p /work/kernel /work/rootfs /tmp "%{install-root}/boot/EFI/Linux"
-    # bootc computes the composefs digest from the final rootfs and generates
-    # the `.cmdline` (including the v1 digest + v2 fallback and our kargs.d
-    # entries such as systemd.volatile=yes). No kargs may be passed at install.
-    bootc container split-kernel-and-rootfs --rootfs /layer --output /work/kernel
+    # The BST sandbox root is FUSE and cannot read xattrs (listxattr returns
+    # ENOTSUP), which bootc's composefs scanner requires. Copy the rootfs onto
+    # /tmp (tmpfs) where xattrs work. The composefs transform only keeps
+    # security.capability, so tmpfs's lack of persistent security.* xattrs is
+    # harmless. /var/tmp is needed by bootc for its temp repo; our patched
+    # bootc honours TMPDIR, which we point at the writable /tmp.
+    export TMPDIR=/tmp
+    WORK=/tmp/mjolnir-uki
+    ROOTFS="$WORK/rootfs"
+    mkdir -p "$WORK" "${ROOTFS}" "$WORK/keys" \
+      "%{install-root}/boot/EFI/Linux" \
+      "%{install-root}/usr/lib/systemd/boot/efi" "%{install-root}/usr/share/mjolnir"
+    # Staged deps are read-only; copy keys to writable /tmp and fix their mode
+    # (systemd-sbsign refuses overly permissive private keys).
+    cp /boot-keys/*.key /boot-keys/*.crt "$WORK/keys/"
+    chmod 0600 "$WORK/keys/"*.key
+    cp -a /layer/. "${ROOTFS}/"
+
+    # Use the kernel/initramfs already built by kernel/initramfs.bst (staged
+    # at /kernel). Do NOT run split-kernel-and-rootfs on the rootfs: it *moves*
+    # files out of the tree whose digest we pin, and would change that digest.
     kver=$(cat /kernel/usr/lib/mjolnir-kernel-version)
-    test -f "/work/kernel/${kver}/vmlinuz"
-    test -f "/work/kernel/${kver}/initramfs.img"
-    bootc container ukify --rootfs /layer --kernel-dir "/work/kernel/${kver}" \
-      -- --output "/work/mjolnir.efi" \
+    KDIR="/kernel/usr/lib/modules/${kver}"
+    test -f "$KDIR/vmlinuz"
+    test -f "$KDIR/initramfs.img"
+
+    # bootc computes the composefs digest of the exact rootfs and generates the
+    # `.cmdline` (v1 digest + v2 fallback + kargs.d entries such as
+    # systemd.volatile=yes). No --karg may be passed at install time.
+    bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
+      -- --output "$WORK/mjolnir.efi" \
       --uname "${kver}" \
       --signtool=systemd-sbsign --no-sign-kernel \
-      --secureboot-private-key=/boot-keys/VENDOR.key \
-      --secureboot-certificate=/boot-keys/VENDOR.crt
+      --secureboot-private-key="${WORK}/keys/VENDOR.key" \
+      --secureboot-certificate="${WORK}/keys/VENDOR.crt"
+
     # Assert the signature and that the digest was baked into the cmdline.
-    sbverify --cert /boot-keys/VENDOR.crt /work/mjolnir.efi
-    objcopy -O binary -j .cmdline /work/mjolnir.efi /work/cmdline.txt
-    grep -q 'composefs' /work/cmdline.txt
-    grep -q 'systemd.volatile=yes' /work/cmdline.txt
-    install -Dm644 /work/mjolnir.efi \
+    sbverify --cert "${WORK}/keys/VENDOR.crt" "$WORK/mjolnir.efi"
+    objcopy -O binary -j .cmdline "$WORK/mjolnir.efi" "$WORK/cmdline.txt"
+    grep -q 'composefs' "$WORK/cmdline.txt"
+    grep -q 'systemd.volatile=yes' "$WORK/cmdline.txt"
+    install -Dm644 "$WORK/mjolnir.efi" \
       "%{install-root}/boot/EFI/Linux/mjolnir-${kver}.efi"
+
     # Sign systemd-boot so Secure Boot can load the loader; bootctl prefers
     # the .signed variant.
-    systemd-sbsign sign \
-      --private-key=/boot-keys/VENDOR.key \
-      --certificate=/boot-keys/VENDOR.crt \
+    /usr/lib/systemd/systemd-sbsign sign \
+      --private-key="${WORK}/keys/VENDOR.key" \
+      --certificate="${WORK}/keys/VENDOR.crt" \
       --output="%{install-root}/usr/lib/systemd/boot/efi/systemd-boot%{efi-arch}.efi.signed" \
       "/usr/lib/systemd/boot/efi/systemd-boot%{efi-arch}.efi"
-    # The composefs digest for attestation/verification.
-    bootc container compute-composefs-digest /layer > "%{install-root}/usr/share/mjolnir/composefs-digest.txt"
+
+    # The pinned composefs digest, for attestation/verification.
+    bootc container compute-composefs-digest "$ROOTFS" > \
+      "%{install-root}/usr/share/mjolnir/composefs-digest.txt"

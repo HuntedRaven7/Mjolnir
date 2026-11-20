@@ -7,6 +7,10 @@ sources:
   url: github:bootc-dev/bootc.git
   track: v*
   ref: v1.17.3-0-g6d7893f2dbdd289a4a04a5727e4df29433d43024
+# Let the sealed-UKI build element override the composefs temp dir via TMPDIR;
+# BST sandboxes have a read-only root and only /tmp is writable.
+- kind: patch
+  path: files/patches/bootc-tmpdir.patch
 - kind: cargo2
   ref:
   - kind: registry

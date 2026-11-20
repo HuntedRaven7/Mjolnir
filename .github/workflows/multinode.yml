@@ -1,0 +1,49 @@
+name: multinode
+
+# KubeStellar propagation gate. Creates two kind clusters (WDS + ITS) and
+# asserts that MjolnirNode objects and their status subresource propagate
+# between them, and that the Console fleet-list query returns both nodes.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: multinode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  propagation:
+    name: KubeStellar WDS<->ITS propagation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          python-version: '3.12'
+
+      - name: Create kind clusters
+        uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          cluster_name: mjolnir-bootstrap
+          version: v0.27.0
+
+      - name: Run multi-node propagation test
+        run: bash testsuite/multinode/test.sh
+
+      - name: Upload sync-agent log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multinode-sync-agent-log
+          path: /tmp/opencode/mjolnir-sync-agent.log
+          if-no-files-found: ignore

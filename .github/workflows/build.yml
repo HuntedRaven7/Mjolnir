@@ -66,7 +66,22 @@ jobs:
           go-version: '1.24'
           cache: false
 
+      # The BuildStream cache travels as a GHCR OCI artifact rather than via
+      # actions/cache: the FSDK cache is many GB and GitHub's per-repo cache
+      # limit is 10 GB, so it gets evicted and every run starts cold. GHCR
+      # storage and bandwidth are free and uncapped. See scripts/bst-cache-oci.sh.
+      # The public read-only caches in project.conf still cover upstream FSDK.
+      - name: Restore BuildStream cache
+        continue-on-error: true
+        env:
+          BST_CACHE_REF: ghcr.io/${{ github.repository_owner }}/mjolnir-cache
+          BST_CACHE_KEY: bst-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: just cache-pull
+
       - name: Build and export image
+        id: build-image
         run: |
           just bst build oci/mjolnir.bst
           just export
@@ -141,3 +156,20 @@ jobs:
         with:
           image-name: mjolnir
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # `latest` is written even when the build failed — what it built is what
+      # the next run should not repeat. The graph-keyed tag is written only for
+      # a complete build, so a partial cache never claims to be complete.
+      - name: Save BuildStream cache
+        if: always()
+        continue-on-error: true
+        env:
+          BST_CACHE_REF: ghcr.io/${{ github.repository_owner }}/mjolnir-cache
+          BST_CACHE_KEY: bst-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          if [ "${{ steps.build-image.outcome }}" != "success" ]; then
+            unset BST_CACHE_KEY
+          fi
+          just cache-push
