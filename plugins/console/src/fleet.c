@@ -102,13 +102,37 @@ static char *node_name(void) {
 }
 
 static char *wifi_ssid(void) {
-    DIR *d = opendir("/var/lib/iwd");
+    // NetworkManager keyfiles are named after the SSID. Prefer the active
+    // connection but fall back to the first provisioned profile.
+    char out[8192];
+    const char *argv[] = { "/usr/bin/nmcli", "-j", "-f", "GENERAL.CONNECTION",
+                           "device", "show", NULL };
+    if (run_capture(argv, out, sizeof(out)) == 0) {
+        json_object *j = json_tokener_parse(out);
+        if (j && json_object_get_type(j) == json_type_array) {
+            int n = json_object_array_length(j);
+            for (int i = 0; i < n; i++) {
+                json_object *o = json_object_array_get_idx(j, i), *v = NULL;
+                if (o && json_object_object_get_ex(o, "value", &v)) {
+                    const char *s = json_object_get_string(v);
+                    if (s && *s && strcmp(s, "--")) {
+                        char *r = strdup(s);
+                        json_object_put(j);
+                        return r;
+                    }
+                }
+            }
+        }
+        if (j) json_object_put(j);
+    }
+
+    DIR *d = opendir("/etc/NetworkManager/system-connections");
     if (!d) return NULL;
     struct dirent *e;
     while ((e = readdir(d))) {
         size_t len = strlen(e->d_name);
-        if (len > 4 && !strcmp(e->d_name + len - 4, ".psk")) {
-            char *ssid = strndup(e->d_name, len - 4);
+        if (len > 13 && !strcmp(e->d_name + len - 13, ".nmconnection")) {
+            char *ssid = strndup(e->d_name, len - 13);
             closedir(d);
             return ssid;
         }
@@ -118,6 +142,27 @@ static char *wifi_ssid(void) {
 }
 
 static char *wifi_interface(void) {
+    char out[8192];
+    const char *argv[] = { "/usr/bin/nmcli", "-j", "-f",
+                           "GENERAL.DEVICE,GENERAL.TYPE", "device", "show", NULL };
+    if (run_capture(argv, out, sizeof(out)) == 0) {
+        json_object *j = json_tokener_parse(out);
+        if (j && json_object_get_type(j) == json_type_array) {
+            int n = json_object_array_length(j);
+            for (int i = 0; i < n; i++) {
+                json_object *o = json_object_array_get_idx(j, i), *v = NULL;
+                if (o && json_object_object_get_ex(o, "value", &v)) {
+                    const char *s = json_object_get_string(v);
+                    if (s && strncmp(s, "wl", 2) == 0) {
+                        char *r = strdup(s);
+                        json_object_put(j);
+                        return r;
+                    }
+                }
+            }
+        }
+        if (j) json_object_put(j);
+    }
     DIR *d = opendir("/sys/class/net");
     if (!d) return NULL;
     struct dirent *e;
@@ -132,40 +177,46 @@ static char *wifi_interface(void) {
     return NULL;
 }
 
-static char *wifi_signal(const char *ifname) {
-    if (!ifname) return strdup("");
-    char path[256], out[8192];
-    snprintf(path, sizeof(path), "/net.connman.iwd/%s/Station", ifname);
-    const char *argv[] = { "/usr/bin/busctl", "--json=short", "get-property",
-                           "io.iwd", path, "io.iwd.Station", "Signal", NULL };
-    if (run_capture(argv, out, sizeof(out)) != 0) return strdup("");
-    json_object *j = json_tokener_parse(out);
-    if (!j) return strdup("");
-    json_object *v = NULL;
-    const char *s = "";
-    if (json_object_get_type(j) == json_type_object && json_object_object_get_ex(j, "value", &v))
-        s = json_object_get_string(v);
-    char *result = strdup(s ? s : "");
-    json_object_put(j);
-    return result;
-}
-
 static char *wifi_state(const char *ifname) {
     if (!ifname) return strdup("absent");
-    char out[16384];
-    const char *argv[] = { "/usr/bin/ip", "-j", "link", "show", "dev", ifname, NULL };
+    char out[8192];
+    const char *argv[] = { "/usr/bin/nmcli", "-j", "-f", "GENERAL.STATE",
+                           "device", "show", ifname, NULL };
     if (run_capture(argv, out, sizeof(out)) != 0) return strdup("unknown");
     json_object *j = json_tokener_parse(out);
-    if (!j) return strdup("unknown");
     const char *s = "unknown";
-    if (json_object_get_type(j) == json_type_array) {
-        json_object *o = json_object_array_get_idx(j, 0);
-        json_object *v = NULL;
-        if (o && json_object_object_get_ex(o, "operstate", &v))
+    if (j && json_object_get_type(j) == json_type_array) {
+        json_object *o = json_object_array_get_idx(j, 0), *v = NULL;
+        if (o && json_object_object_get_ex(o, "value", &v))
             s = json_object_get_string(v);
     }
     char *result = strdup(s ? s : "unknown");
-    json_object_put(j);
+    if (j) json_object_put(j);
+    return result;
+}
+
+static char *wifi_signal(const char *ifname) {
+    (void)ifname;
+    char out[32768];
+    const char *argv[] = { "/usr/bin/nmcli", "-j", "-f", "IN-USE,SSID,SIGNAL",
+                           "device", "wifi", "list", "--rescan", "no", NULL };
+    if (run_capture(argv, out, sizeof(out)) != 0) return strdup("");
+    json_object *j = json_tokener_parse(out);
+    const char *s = "";
+    if (j && json_object_get_type(j) == json_type_array) {
+        int n = json_object_array_length(j);
+        for (int i = 0; i < n; i++) {
+            json_object *o = json_object_array_get_idx(j, i), *v = NULL;
+            if (o && json_object_object_get_ex(o, "IN-USE", &v)) {
+                const char *inuse = json_object_get_string(v);
+                if (inuse && strchr(inuse, '*') &&
+                    json_object_object_get_ex(o, "SIGNAL", &v))
+                    s = json_object_get_string(v);
+            }
+        }
+    }
+    char *result = strdup(s ? s : "");
+    if (j) json_object_put(j);
     return result;
 }
 
@@ -393,15 +444,27 @@ static json_object *dispatch(json_object *req) {
     if (!strcmp(method, "io.mjolnir.Fleet.ClearRebootLock")) {
         unlink("/run/reboot-lock");
         unlink("/etc/reboot-lock");
-        return action_result("clear-reboot-lock", "reboot lock cleared");
+        // Also release kured's cluster-wide lock so a held reboot resumes.
+        char path[512];
+        snprintf(path, sizeof(path), "%s/fleet-kubeconfig", credential_dir());
+        if (access(path, F_OK) == 0) {
+            ensure_kubeconfig();
+            const char *argv[] = {
+                "/usr/bin/kubectl", "-n", "kube-system", "annotate", "ds", "kured",
+                "weave.works/kured-node-lock-", NULL
+            };
+            run_quiet(argv);
+        }
+        return action_result("clear-reboot-lock", "local lock cleared; kured lock is cluster-wide (clear via kubectl)");
     }
     if (!strcmp(method, "io.mjolnir.Fleet.Reboot")) {
         unlink("/run/kubestellar-reboot-deferred");
-        const char *argv[] = { "/usr/bin/systemctl", "reboot", NULL };
-        int rc = run_quiet(argv);
-        char msg[256];
-        snprintf(msg, sizeof(msg), rc == 0 ? "reboot requested" : "reboot request failed (%d)", rc);
-        return action_result("reboot", msg);
+        // Do not reboot directly: create the sentinel that kured watches so
+        // the node is drained and reboots are coordinated cluster-wide.
+        int fd = open("/run/reboot-required", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd < 0) die("write /run/reboot-required");
+        close(fd);
+        return action_result("reboot", "reboot requested via kured");
     }
     if (!strcmp(method, "io.mjolnir.Fleet.RotateJoinToken")) {
         char *role = credential("role");

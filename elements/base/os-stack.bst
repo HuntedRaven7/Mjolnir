@@ -24,8 +24,11 @@ depends:
 - freedesktop-sdk.bst:components/iproute2.bst
 - freedesktop-sdk.bst:components/procps.bst
 
-# WiFi client (station mode) and firmware.
-- freedesktop-sdk.bst:components/iwd.bst
+# WiFi client (station mode) and firmware. NetworkManager is the daemon;
+# wpa-supplicant is the explicitly selected WiFi backend (FSDK's NM build
+# defaults to iwd, which we do not use).
+- freedesktop-sdk.bst:components/networkmanager.bst
+- freedesktop-sdk.bst:components/wpa-supplicant.bst
 - freedesktop-sdk.bst:components/linux-firmware.bst
 - freedesktop-sdk.bst:components/wireless-regdb-bin.bst
 

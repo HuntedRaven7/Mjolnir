@@ -19,6 +19,7 @@ paths: a **Tier 2 dynamic card** that reads `/api/mcp/custom-resources`, and a
 | `src/card.tsx`, `build-card.py` | Source and generator for the Tier 2 card |
 | `card.json` | Generated dynamic card definition |
 | `mission.json` | Console mission / runbook |
+| `manifests/kured.yaml` | Pinned kured DaemonSet and RBAC |
 
 ## Status fields
 
@@ -54,10 +55,10 @@ service registers `io.mjolnir.Fleet` at
 | Method | Effect |
 |---|---|
 | `Status` | Full status JSON |
-| `WifiStatus` | iwd SSID, interface, link state and signal |
+| `WifiStatus` | NetworkManager SSID, interface, link state and signal |
 | `Upgrade` | `bootc upgrade --download-only` (stage, no reboot) |
-| `ClearRebootLock` | Remove `/run/reboot-lock` and `/etc/reboot-lock` |
-| `Reboot` | Clear deferred flag and `systemctl reboot` |
+| `ClearRebootLock` | Remove local lock files; kured's cluster lock is cleared via `kubectl annotate ds kured weave.works/kured-node-lock-` |
+| `Reboot` | Write `/run/reboot-required`; kured drains and reboots the node |
 | `RotateJoinToken` | `kubeadm token create --print-join-command` (control plane only) |
 
 Example:
@@ -66,6 +67,14 @@ Example:
 varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet \
   io.mjolnir.Fleet.Status '{}'
 ```
+
+## kured
+
+Reboots are not performed directly on the host. kured 1.23.0 is applied at
+cluster bootstrap from `manifests/kured.yaml` with the image pinned by digest.
+It uses the signal reboot method (`CAP_KILL` only, no privileged `nsenter`),
+watches `/run` through a hostPath mount, and coordinates reboots with the
+`weave.works/kured-node-lock` annotation on its DaemonSet.
 
 ## Constraints
 

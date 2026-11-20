@@ -27,7 +27,7 @@ plane.
 
 ## First boot sequence
 
-1. `mjolnir-wifi.service` writes `/var/lib/iwd/<SSID>.psk` and starts `iwd`.
+1. `mjolnir-wifi.service` writes a NetworkManager keyfile to `/etc/NetworkManager/system-connections/<SSID>.nmconnection` and reloads NetworkManager.
 2. `systemd-networkd` obtains an address; `network-online.target` is reached.
 3. `containerd.service` and `kubelet.service` start.
 4. On the control plane, `mjolnir-init.service` runs `kubeadm init`.
@@ -56,7 +56,14 @@ for client configuration and the `--auth` options we deliberately do not use.
 
 ## Updates
 
-`bootc upgrade` stages a new image; `mjolnir-reboot.timer` reboots the node
-after checking `/run/reboot-required`, `/run/reboot-lock`, and
-`/run/kubestellar-reboot-deferred`. Drain workloads before the reboot with your
-normal Kubernetes tooling.
+`bootc upgrade --download-only` stages a new image and writes
+`/run/reboot-required`. The **kured** DaemonSet (applied at bootstrap from
+`plugins/console/manifests/kured.yaml`) watches that sentinel, cordons and
+drains the node, reboots it with SIGRTMIN+5, and uncordons it on return.
+Hold reboots cluster-wide with the kured lock annotation:
+
+```sh
+kubectl -n kube-system annotate ds kured \
+  weave.works/kured-node-lock='{"nodeID":"manual"}' --overwrite
+kubectl -n kube-system annotate ds kured weave.works/kured-node-lock-
+```

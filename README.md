@@ -23,7 +23,7 @@ These were fixed at project start:
 | Shell/SSH/interpreters | Forbidden in base **and** in every enabled layer; helpers are compiled binaries |
 | Kubernetes | Full upstream kubeadm — control plane + workers, token join, Cilium CNI |
 | KubeStellar | Core propagation + Console, applied as pinned Kubernetes manifests |
-| WiFi | Client/station mode only (`iwd`), WPA2/WPA3-Personal |
+| WiFi | Client/station mode only (NetworkManager + wpa-supplicant), WPA2/WPA3-Personal |
 | Node management | Varlink-over-HTTPS with mTLS, plus the Kubernetes API |
 | First deliverable | A buildable, bootable image |
 

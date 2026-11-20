@@ -34,7 +34,8 @@ just vm           # boot that disk in QEMU with a serial console
 
 1. Junctions FSDK 26.08.4 at a pinned git ref.
 2. Composes a payload from `runtime-minimal` (no bash/coreutils), systemd,
-   iwd, firmware, kernel/initramfs, and the compiled Mjolnir components.
+   NetworkManager + wpa-supplicant, firmware, kernel/initramfs, and the
+   compiled Mjolnir components.
 3. Sanitizes the composition: denies shells, SSH and interpreters; clears
    SUID/SGID bits and file capabilities.
 4. Emits an OCI layout with `containers.bootc=1` and the `ref.name` annotation

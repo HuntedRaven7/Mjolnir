@@ -24,6 +24,9 @@ sources:
 - kind: local
   path: plugins/console/rbac.yaml
   directory: rbac
+- kind: local
+  path: plugins/console/manifests
+  directory: manifests
 
 config:
   install-commands:
@@ -33,3 +36,4 @@ config:
   - cp -a crds "%{install-root}/crds"
   - mkdir -p "%{install-root}/rbac"
   - cp -a rbac/. "%{install-root}/rbac/"
+  - cp -a manifests "%{install-root}/manifests"

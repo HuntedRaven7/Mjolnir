@@ -30,5 +30,5 @@ config:
     install -Dm644 /config/modules-load.d/kubernetes.conf "${root}/usr/lib/modules-load.d/kubernetes.conf"
     install -Dm644 /config/bootc-install/00-defaults.toml "${root}/usr/lib/bootc/install/00-defaults.toml"
     install -Dm644 /config/ostree/prepare-root.conf "${root}/usr/lib/ostree/prepare-root.conf"
-    install -Dm644 /config/iwd/main.conf "${root}/etc/iwd/main.conf"
-    install -Dm644 /config/networkd/10-ethernet.network "${root}/etc/systemd/network/10-ethernet.network"
+    install -Dm644 /config/NetworkManager/conf.d/10-wifi-backend.conf \
+      "${root}/etc/NetworkManager/conf.d/10-wifi-backend.conf"

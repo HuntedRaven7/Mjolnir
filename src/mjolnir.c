@@ -7,6 +7,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,8 +146,23 @@ static int cmd_join(void) {
 }
 
 // ---------------------------------------------------------------------------
-// WiFi client provisioning (iwd)
+// WiFi client provisioning (NetworkManager + wpa-supplicant)
 // ---------------------------------------------------------------------------
+// Deterministic UUID for a connection profile, derived from the SSID, so
+// reprovisioning the same network updates the same connection.
+static void connection_uuid(const char *ssid, char out[37]) {
+    uint64_t h1 = 1469598103934665603ULL, h2 = 1469598103934665603ULL;
+    for (const unsigned char *p = (const unsigned char *)ssid; *p; p++) {
+        h1 = (h1 ^ *p) * 1099511628211ULL;
+        h2 = (h2 ^ (uint64_t)(*p + 0x9e)) * 1099511628211ULL;
+    }
+    snprintf(out, 37,
+             "%08x-%04x-4%03x-8%03x-%08x%04x",
+             (unsigned)(h1 >> 32), (unsigned)((h1 >> 16) & 0xffff),
+             (unsigned)(h1 & 0xfff), (unsigned)(h2 & 0xfff),
+             (unsigned)(h2 >> 32), (unsigned)((h2 >> 16) & 0xffff));
+}
+
 static int cmd_wifi(void) {
     char ssid[256] = {0}, psk[256] = {0};
     if (read_credential("wifi-ssid", ssid, sizeof(ssid)) < 0 ||
@@ -156,12 +172,41 @@ static int cmd_wifi(void) {
     }
     if (strlen(psk) != 64)
         die("wifi-psk must be a 64 character hex string");
-    if (mkdir("/var/lib/iwd", 0700) < 0 && errno != EEXIST)
-        die("mkdir /var/lib/iwd");
-    char path[512], content[512];
-    snprintf(path, sizeof(path), "/var/lib/iwd/%s.psk", ssid);
-    snprintf(content, sizeof(content), "[Security]\nPassphrase=%s\n", psk);
+
+    const char *dir = "/etc/NetworkManager/system-connections";
+    if (mkdir(dir, 0700) < 0 && errno != EEXIST)
+        die("mkdir system-connections");
+
+    char uuid[37];
+    connection_uuid(ssid, uuid);
+    char path[512], content[1024];
+    snprintf(path, sizeof(path), "%s/%s.nmconnection", dir, ssid);
+    snprintf(content, sizeof(content),
+             "[connection]\n"
+             "id=%s\n"
+             "uuid=%s\n"
+             "type=wifi\n"
+             "autoconnect=true\n"
+             "autoconnect-priority=10\n"
+             "\n"
+             "[wifi]\n"
+             "mode=infrastructure\n"
+             "ssid=%s\n"
+             "\n"
+             "[wifi-security]\n"
+             "key-mgmt=wpa-psk\n"
+             "psk=%s\n"
+             "\n"
+             "[ipv4]\n"
+             "method=auto\n"
+             "\n"
+             "[ipv6]\n"
+             "method=auto\n",
+             ssid, uuid, ssid, psk);
     write_file(path, content, 0600);
+
+    const char *argv[] = { "/usr/bin/nmcli", "connection", "reload", NULL };
+    run(argv);
     return 0;
 }
 
@@ -206,6 +251,7 @@ static int cmd_apply(void) {
     const char *kubeconfig = ADMIN_CONF;
     const char *dirs[] = {
         MANIFEST_DIR "/crds",
+        MANIFEST_DIR "/kured",
         MANIFEST_DIR "/cilium",
         MANIFEST_DIR "/kubestellar"
     };
@@ -227,20 +273,18 @@ static int cmd_apply(void) {
 }
 
 // ---------------------------------------------------------------------------
-// reboot coordination: only reboot when bootc flagged /run/reboot-required
-// and no Kubernetes drain is in progress.
+// request a reboot by writing the sentinel kured watches. kured performs the
+// cordon/drain/reboot so workloads are handled by Kubernetes.
 // ---------------------------------------------------------------------------
 static int cmd_reboot(void) {
     if (access("/run/reboot-lock", F_OK) == 0 || access("/etc/reboot-lock", F_OK) == 0) {
-        fprintf(stderr, "mjolnir-helper: reboot held by lock\n");
+        fprintf(stderr, "mjolnir-helper: reboot held by local lock\n");
         return 0;
     }
-    if (access("/run/reboot-required", F_OK) != 0)
-        return 0;
-    if (access("/run/kubestellar-reboot-deferred", F_OK) == 0)
-        return 0;
-    const char *argv[] = { "/usr/bin/systemctl", "reboot", NULL };
-    run(argv);
+    int fd = open("/run/reboot-required", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (fd < 0)
+        die("write /run/reboot-required");
+    close(fd);
     return 0;
 }
 

@@ -29,7 +29,9 @@ required = [
     "/usr/lib/systemd/system/mjolnir-fleet-varlink.socket",
     "/usr/lib/systemd/system/mjolnir-fleet-publish.timer",
     "/usr/share/mjolnir/manifests/crds/mjolnirnodes.yaml",
-    "/usr/libexec/iwd",
+    "/usr/share/mjolnir/manifests/kured/kured.yaml",
+    "/usr/bin/nmcli",
+    "/usr/bin/wpa_supplicant",
     "/etc/mjolnir/kubeadm-init.yaml",
     "/usr/share/mjolnir/manifests/cilium/00-cilium.yaml",
     "/usr/lib/systemd/system/mjolnir-init.service",
@@ -58,6 +60,8 @@ with tarfile.open(fileobj=io.BytesIO(out), mode="r:") as tf:
     names = set(m.name.lstrip("./") for m in tf.getmembers())
 
 errors = [f"missing {p}" for p in required if p.lstrip("/") not in names]
+if "usr/lib/systemd/system/mjolnir-reboot.timer" in names:
+    errors.append("obsolete mjolnir-reboot.timer is still present (kured replaces it)")
 
 kernels = [n for n in names if n.startswith("usr/lib/modules/") and n.endswith("/vmlinuz")]
 if not kernels:

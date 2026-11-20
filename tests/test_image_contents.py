@@ -20,6 +20,7 @@ FORBIDDEN_EXACT = {
     "usr/bin/zsh", "usr/bin/fish", "usr/bin/python", "usr/bin/python3",
     "usr/bin/perl", "usr/bin/ruby", "usr/bin/node", "usr/bin/php",
     "usr/bin/lua", "usr/bin/awk", "usr/bin/gawk", "usr/bin/ssh",
+    "usr/libexec/iwd", "usr/lib/systemd/system/iwd.service",
     "usr/bin/sshd", "usr/sbin/sshd", "usr/bin/scp", "usr/bin/sftp",
 }
 

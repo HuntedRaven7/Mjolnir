@@ -1,6 +1,0 @@
-[Unit]
-Description=Coordinate a bootc upgrade reboot with Kubernetes workloads
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/mjolnir-helper reboot

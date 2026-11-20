@@ -28,7 +28,7 @@ ELF binaries and static data; no script is shipped to the target.
 freedesktop-sdk (junction, pinned)
 └── base/runtime.bst            systemd, glibc, coreutils subset, util-linux subset
     └── base/sanitize.bst       removes shells/interpreters/SSH, SUID/SGID, file caps
-        ├── net/wifi.bst        iwd + firmware + config (client only)
+        ├── net/wifi.bst        NetworkManager + wpa-supplicant + firmware (client only)
         ├── net/primary.bst     systemd-networkd, resolved
         ├── mgmt/varlink.bst    varlink-httpd (Rust), credstore integration
         ├── k8s/runtime.bst     kubeadm, kubelet, kubectl, crictl, containerd, runc, CNI
@@ -52,7 +52,7 @@ CONTAINER=oci
    system (USB stick, BMC, or out-of-band). No SSH, no console login.
 3. Role selection is a credential: `mjolnir.role = control-plane | worker`.
 4. `mjolnir-wifi.service` writes the WPA PSK from a credential into
-   `/var/lib/iwd/<SSID>.psk`, then `iwd` associates and reports
+   a NetworkManager keyfile at `/etc/NetworkManager/system-connections/<SSID>.nmconnection`, then NetworkManager associates and reports
    `network-online.target`.
 5. `varlink-httpd.socket` activates the management API on TCP 1031. TLS
    material and the client CA come from `/etc/credstore` via
@@ -62,9 +62,9 @@ CONTAINER=oci
    it applies Cilium, then KubeStellar and the Console manifests.
 7. **Worker**: `mjolnir-join.service` reads the bootstrap token and CA hash
    from credentials and execs `kubeadm join`.
-8. Updates are `bootc upgrade` + reboot; reboots on Kubernetes nodes are
-   coordinated by a small unit that checks for active workloads before
-   rebooting (kured-style, without a shell).
+8. Updates are `bootc upgrade --download-only`; a staged update sets
+   `/run/reboot-required`. **kured** (pinned DaemonSet, signal reboot method)
+   drains the node and reboots it under a cluster-wide lock annotation.
 
 ## 4. Enforcing "no shell / no SSH / no interpreters"
 
@@ -88,9 +88,9 @@ This is a build-time property, not a runtime policy.
 
 - `systemd-networkd` handles wired links; `systemd-resolved` provides
   `/etc/resolv.conf` at the path kubelet expects.
-- `iwd` is the only WiFi component (client/station mode, `EnableNetworkConfiguration=true`).
+- `NetworkManager` with the `wpa-supplicant` WiFi backend is the only wireless component (client/station mode). FSDK builds NetworkManager with iwd support; our config forces `wifi.backend=wpa-supplicant`.
 - PSKs are never in the image: `mjolnir-wifi` copies a 64-hex-digit PSK from the
-  credential store to `/var/lib/iwd/<SSID>.psk` with mode 0600.
+  credential store to `/etc/NetworkManager/system-connections/<SSID>.nmconnection` with mode 0600.
 - Firmware is included from FSDK; the deny-list of non-free firmware is
   intentional — only firmware reachable from FSDK is shipped.
 - Cilium is the CNI, replacing kube-proxy (`kubeProxyReplacement=true`).

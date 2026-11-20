@@ -1,12 +1,9 @@
 [Unit]
-Description=Provision iwd WiFi client credentials
-Before=iwd.service
-ConditionPathExists=/usr/libexec/iwd
+Description=Provision NetworkManager WiFi client credentials
+Before=NetworkManager.service
+ConditionPathExists=/usr/bin/nmcli
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/mjolnir-helper wifi
-
-[Install]
-WantedBy=multi-user.target

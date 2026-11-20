@@ -6,7 +6,7 @@
   "authorGithub": "HuntedRaven7",
   "mission": {
     "title": "Mjolnir bootc fleet operations",
-    "description": "Inspect, upgrade and reboot a fleet of Mjolnir bootc nodes from KubeStellar Console.",
+    "description": "Inspect, upgrade and reboot a fleet of Mjolnir bootc nodes. Reboots are drained and coordinated by kured.",
     "type": "operations",
     "status": "completed",
     "estimatedMinutes": 15,
@@ -26,21 +26,34 @@
         "failureHandling": "Apply plugins/console/crds/mjolnirnodes.yaml and check the mjolnir-fleet-publish timer on the node."
       },
       {
-        "id": "step-02-status",
-        "title": "Read live node status over mTLS Varlink",
-        "description": "The fleet service exposes io.mjolnir.Fleet over varlink-httpd on port 1031. Use a client certificate trusted by the node.",
+        "id": "step-02-kured",
+        "title": "Verify kured is running on every node",
+        "description": "kured watches /run/reboot-required via a hostPath mount, drains the node and reboots it with a cluster-wide lock.",
         "commands": [
-          "varlinkctl call --show-type https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}'",
+          "kubectl -n kube-system rollout status ds/kured",
+          "kubectl -n kube-system get ds kured -o jsonpath='{.metadata.annotations.weave\\.works/kured-node-lock}'"
+        ],
+        "validation": {
+          "command": "kubectl -n kube-system get ds kured -o jsonpath='{.status.numberReady}'",
+          "expected": "equal to the number of nodes"
+        },
+        "failureHandling": "Apply plugins/console/manifests/kured.yaml; ensure hostPID is enabled and the node can signal PID 1."
+      },
+      {
+        "id": "step-03-status",
+        "title": "Read live node status over mTLS Varlink",
+        "description": "The fleet service exposes io.mjolnir.Fleet over varlink-httpd on port 1031.",
+        "commands": [
+          "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}'",
           "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.WifiStatus '{}'"
         ],
         "validation": {
           "command": "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}' | jq -r .version",
           "expected": "the deployed image version"
-        },
-        "failureHandling": "Check varlink-httpd.socket and mjolnir-fleet-varlink.socket on the node and verify client cert trust."
+        }
       },
       {
-        "id": "step-03-upgrade",
+        "id": "step-04-upgrade",
         "title": "Queue a bootc update without rebooting",
         "description": "Download and stage a new image; the node reports updateAvailable=true after staging.",
         "commands": [
@@ -53,22 +66,34 @@
         }
       },
       {
-        "id": "step-04-reboot",
-        "title": "Drain and reboot an updated node",
-        "description": "Cordon and drain the node, clear any reboot lock, then request a reboot through Varlink.",
+        "id": "step-05-reboot",
+        "title": "Request a coordinated reboot",
+        "description": "The Varlink action writes /run/reboot-required; kured drains the node, reboots it and uncordons it on return.",
         "commands": [
-          "kubectl drain NODE --ignore-daemonsets --delete-emptydir-data",
-          "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.ClearRebootLock '{}'",
           "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Reboot '{}'",
-          "kubectl uncordon NODE"
+          "kubectl get nodes -w"
         ],
         "validation": {
           "command": "kubectl get mjolnirnode NODE -o jsonpath='{.status.version}'",
           "expected": "the new image version after the node returns"
+        },
+        "failureHandling": "If the cluster-wide kured lock is held, clear it with: kubectl -n kube-system annotate ds kured weave.works/kured-node-lock-"
+      },
+      {
+        "id": "step-06-hold",
+        "title": "Hold reboots cluster-wide (maintenance window)",
+        "description": "Set kured's lock annotation to block reboots; release it explicitly when the window opens.",
+        "commands": [
+          "kubectl -n kube-system annotate ds kured weave.works/kured-node-lock='{\"nodeID\":\"manual\"}' --overwrite",
+          "kubectl -n kube-system annotate ds kured weave.works/kured-node-lock-"
+        ],
+        "validation": {
+          "command": "kubectl -n kube-system get ds kured -o jsonpath='{.metadata.annotations.weave\\.works/kured-node-lock}'",
+          "expected": "empty after the lock is released"
         }
       },
       {
-        "id": "step-05-token",
+        "id": "step-07-token",
         "title": "Rotate the worker join token (control plane only)",
         "description": "Create a fresh bootstrap token and update the provisioning credential on new workers.",
         "commands": [
@@ -81,9 +106,10 @@
       }
     ],
     "resolution": {
-      "summary": "All Mjolnir nodes report status as MjolnirNode resources, updates are staged through Varlink, and reboots are coordinated with Kubernetes drains.",
+      "summary": "Mjolnir nodes report status as MjolnirNode resources, bootc updates are staged through Varlink, and kured drains and reboots nodes under a cluster-wide lock.",
       "codeSnippets": [
         "kubectl get mjolnirnodes -o wide",
+        "kubectl -n kube-system rollout status ds/kured",
         "varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet io.mjolnir.Fleet.Status '{}'"
       ]
     },
@@ -93,25 +119,30 @@
       {
         "symptom": "No MjolnirNode resources appear",
         "action": "Check that the fleet-kubeconfig credential is provisioned and that mjolnir-fleet-publish.timer is active on the node."
+      },
+      {
+        "symptom": "A node never reboots after an update",
+        "action": "Check /run/reboot-required on the node, the kured pod logs, and the cluster-wide kured lock annotation."
       }
     ],
     "references": [
-      "https://github.com/HuntedRaven7/Mjolnir/tree/main/plugins/console"
+      "https://github.com/HuntedRaven7/Mjolnir/tree/main/plugins/console",
+      "https://kured.dev/docs/"
     ]
   },
   "metadata": {
-    "tags": ["mjolnir", "bootc", "fleet", "varlink", "kubestellar"],
+    "tags": ["mjolnir", "bootc", "fleet", "varlink", "kured", "kubestellar"],
     "difficulty": "intermediate",
     "platform": "kubernetes",
     "issueTypes": ["operations"],
     "installMethods": ["kubectl", "varlinkctl"],
     "targetResourceKinds": ["MjolnirNode"],
-    "supportedK8sVersions": ["1.32", "1.33", "1.34", "1.35"]
+    "supportedK8sVersions": ["1.35", "1.36", "1.37"]
   },
   "prerequisites": {
-    "kubernetes": ">=1.32",
+    "kubernetes": ">=1.35",
     "tools": ["kubectl", "varlinkctl", "jq"],
-    "description": "A Mjolnir kubeadm cluster with the Console plugin CRD applied and mTLS client credentials for Varlink."
+    "description": "A Mjolnir kubeadm cluster with the Console plugin CRD and kured applied, and mTLS client credentials for Varlink."
   },
   "security": {
     "scannedAt": "",

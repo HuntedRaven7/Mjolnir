@@ -65,6 +65,10 @@ config:
     fi
     rm -rf "${root}/usr/lib/python3"* "${root}/usr/lib/perl5"* \
            "${root}/usr/libexec/openssh" "${root}/etc/ssh" 2>/dev/null || true
+    find "${root}/usr/share/man" \( -type f -o -type l \) \
+      \( -name 'python3*' -o -name 'perl*' \) -delete 2>/dev/null || true
+    rm -rf "${root}/usr/share/licenses/freedesktop-sdk/python3"* \
+           "${root}/usr/share/licenses/freedesktop-sdk/perl"* 2>/dev/null || true
 
     # --- no SUID/SGID or file capabilities ----------------------------------
     find "${root}" -xdev \( -type f -o -type d \) -perm /6000 -exec chmod a-s {} +

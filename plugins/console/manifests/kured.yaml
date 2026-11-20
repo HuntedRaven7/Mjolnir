@@ -1,0 +1,134 @@
+# Vendored from kured 1.23.0 combined release manifest:
+# https://github.com/kubereboot/kured/releases/download/1.23.0/kured-1.23.0-combined.yaml
+# upstream sha256: 8572f7f2118ae7c943e9a3624f2385162ff9ec4e49283b65fd0c091714a2c662
+#
+# Adapted for Mjolnir's immutable bootc nodes:
+#   - image pinned by multi-arch digest
+#   - /run exposed via hostPath for the reboot sentinel
+#   - signal reboot method (CAP_KILL only, no privileged nsenter)
+#   - short period so a staged bootc update is applied promptly
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kured
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kured
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "delete", "get"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kured
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kured
+subjects:
+  - kind: ServiceAccount
+    name: kured
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kured
+  namespace: kube-system
+rules:
+  - apiGroups: ["apps"]
+    resourceNames: ["kured"]
+    resources: ["daemonsets"]
+    verbs: ["update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kured
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kured
+subjects:
+  - kind: ServiceAccount
+    name: kured
+    namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kured
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: kured
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: kured
+    spec:
+      serviceAccountName: kured
+      hostPID: true
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: kured
+          image: ghcr.io/kubereboot/kured@sha256:8dfd3c2e889337595731d801afc5c031b545876a29427897b3f711d2983f30c4
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/bin/kured
+            - --reboot-sentinel=/sentinel/reboot-required
+            - --reboot-method=signal
+            - --reboot-signal=39
+            - --period=5m
+            - --lock-ttl=30m
+            - --drain-timeout=10m
+            - --force-reboot=false
+            - --concurrency=1
+          env:
+            - name: KURED_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: metrics
+              containerPort: 8080
+          securityContext:
+            privileged: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["*"]
+              add: ["CAP_KILL"]
+          volumeMounts:
+            - name: sentinel
+              mountPath: /sentinel
+              readOnly: true
+      volumes:
+        - name: sentinel
+          hostPath:
+            path: /run
+            type: Directory
