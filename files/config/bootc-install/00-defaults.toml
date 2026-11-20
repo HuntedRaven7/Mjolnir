@@ -1,5 +1,7 @@
 [install]
 bootloader = "systemd"
+# Create the persistent state partition from our repart.d definition.
+run-repart = true
 
 [install.filesystem.root]
 type = "btrfs"

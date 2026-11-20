@@ -1,0 +1,15 @@
+[Unit]
+Description=Persistent CNI IPAM state
+DefaultDependencies=no
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/mjolnir/var/lib/cni
+Where=/var/lib/cni
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

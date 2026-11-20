@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -173,6 +174,21 @@ func registryLogin(r runner, user, token string) error {
 	return r.run("podman", "login", "ghcr.io", "-u", user, "--password-stdin")
 }
 
+func newMachineID() string {
+	b := make([]byte, 16)
+	f, err := os.Open("/dev/urandom")
+	if err != nil {
+		return "4f1a2b3c5d6e7f8091a2b3c4d5e6f708"
+	}
+	defer f.Close()
+	if _, err := io.ReadFull(f, b); err != nil {
+		return "4f1a2b3c5d6e7f8091a2b3c4d5e6f708"
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
 func install(c *config, disk string, r runner) error {
 	if err := r.run("wipefs", "--all", "--force", disk); err != nil {
 		return fmt.Errorf("wipe %s: %w", disk, err)
@@ -192,6 +208,8 @@ func install(c *config, disk string, r runner) error {
 		"--bootloader", "systemd",
 		"--karg", "systemd.firstboot=no",
 		"--karg", "quiet",
+		"--karg", "systemd.volatile=yes",
+		"--karg", "systemd.machine_id=" + newMachineID(),
 		disk,
 	}
 	if err := r.run("podman", args...); err != nil {

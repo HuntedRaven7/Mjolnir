@@ -17,6 +17,26 @@ config:
     mkdir -p "${root}/etc/mjolnir"
     sed 's/@KUBERNETES_VERSION@/%{kubernetes-version}/g' \
       /config/kubeadm-init.yaml > "${root}/etc/mjolnir/kubeadm-init.yaml"
+    # Impermanent root: /etc and /var are tmpfs each boot. Persistent state
+    # is re-attached by native .mount units from /usr (fstab is ephemeral).
+    install -Dm644 /config/bootc/kargs.d/50-volatile.toml \
+      "${root}/usr/lib/bootc/kargs.d/50-volatile.toml"
+    install -Dm644 /config/repart.d/20-mjolnir-state.conf \
+      "${root}/usr/lib/repart.d/20-mjolnir-state.conf"
+    install -Dm644 /config/journald/10-persistent.conf \
+      "${root}/usr/lib/systemd/journald.conf.d/10-persistent.conf"
+    install -Dm644 /config/tmpfiles.d/mjolnir-volatile.conf \
+      "${root}/usr/lib/tmpfiles.d/mjolnir-volatile.conf"
+    install -Dm644 /config/systemd/var-lib-mjolnir.mount \
+      "${root}/usr/lib/systemd/system/var-lib-mjolnir.mount"
+    for m in var-lib-mjolnir etc-machine-id etc-NetworkManager-system-connections \
+             var-lib-containerd var-lib-kubelet var-log-journal var-lib-cni \
+             etc-kubernetes; do
+      if [ "${m}" != "var-lib-mjolnir" ]; then
+        install -Dm644 "/config/systemd/${m}.mount" \
+          "${root}/usr/lib/systemd/system/${m}.mount"
+      fi
+    done
     install -Dm644 /config/containerd-config.toml "${root}/usr/share/mjolnir/containerd/config.toml"
     install -Dm644 /config/crictl.yaml "${root}/etc/crictl.yaml"
     install -Dm644 /config/presets/80-mjolnir.preset \

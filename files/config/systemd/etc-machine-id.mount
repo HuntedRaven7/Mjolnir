@@ -1,0 +1,15 @@
+[Unit]
+Description=Persistent machine-id
+DefaultDependencies=no
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/mjolnir/etc/machine-id
+Where=/etc/machine-id
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

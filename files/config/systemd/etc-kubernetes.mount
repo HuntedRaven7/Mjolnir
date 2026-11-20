@@ -1,0 +1,15 @@
+[Unit]
+Description=Persistent kubeadm configuration
+DefaultDependencies=no
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/mjolnir/etc/kubernetes
+Where=/etc/kubernetes
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

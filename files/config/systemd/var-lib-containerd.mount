@@ -1,0 +1,15 @@
+[Unit]
+Description=Persistent containerd state
+DefaultDependencies=no
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/mjolnir/var/lib/containerd
+Where=/var/lib/containerd
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

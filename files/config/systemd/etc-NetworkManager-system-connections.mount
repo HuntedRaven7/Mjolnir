@@ -1,0 +1,15 @@
+[Unit]
+Description=Persistent NetworkManager connections
+DefaultDependencies=no
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/mjolnir/etc/NetworkManager/system-connections
+Where=/etc/NetworkManager/system-connections
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

@@ -1,0 +1,36 @@
+# Maintenance hooks (adapted from the frameless template conventions).
+# Install with: pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+        exclude: ^files/varlink/varlink-httpd-amd64$
+      - id: check-merge-conflict
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.37.1
+    hooks:
+      - id: yamllint
+        args: [-d, relaxed]
+        exclude: ^(files/manifests/|plugins/console/manifests/)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0
+    hooks:
+      - id: ruff
+        args: [--check]
+
+  - repo: local
+    hooks:
+      - id: mjolnir-static-checks
+        name: Mjolnir static checks
+        entry: python3 tests/test_units.py
+        language: system
+        pass_filenames: false

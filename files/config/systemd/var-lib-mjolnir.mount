@@ -1,0 +1,14 @@
+[Unit]
+Description=Persistent Mjolnir state
+DefaultDependencies=no
+Conflicts=umount.target
+Before=local-fs.target umount.target
+
+[Mount]
+What=/dev/disk/by-label/MjolnirState
+Where=/var/lib/mjolnir
+Type=btrfs
+Options=subvol=/,rw,noatime
+
+[Install]
+WantedBy=local-fs.target

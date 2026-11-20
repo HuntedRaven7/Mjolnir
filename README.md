@@ -24,6 +24,7 @@ These were fixed at project start:
 | Kubernetes | Full upstream kubeadm — control plane + workers, token join, Cilium CNI |
 | KubeStellar | Core propagation + Console, applied as pinned Kubernetes manifests |
 | WiFi | Client/station mode only (NetworkManager + wpa-supplicant), WPA2/WPA3-Personal |
+| Root filesystem | Impermanent: `systemd.volatile=yes`, allowlisted state on `MjolnirState` (see [docs/IMPERMANENCE.md](docs/IMPERMANENCE.md)) |
 | Node management | Varlink-over-HTTPS with mTLS, plus the Kubernetes API |
 | First deliverable | A buildable, bootable image |
 

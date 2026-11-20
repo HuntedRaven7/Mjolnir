@@ -1,0 +1,15 @@
+[Unit]
+Description=Persistent systemd journal
+DefaultDependencies=no
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target
+
+[Mount]
+What=/var/lib/mjolnir/var/log/journal
+Where=/var/log/journal
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
