@@ -158,33 +158,48 @@ a Varlink interface.
 
 ```text
 bst build oci/mjolnir.bst
+  → oci/rootfs.bst (sanitized rootfs; shared with the digester)
+  → uki/mjolnir-uki.bst (signed, digest-pinned UKI + signed systemd-boot)
+  → oci/mjolnir.bst (assemble OCI with boot artifacts)
   → podman load OCI archive
-  → bootc container lint
-  → content assertions
+  → bootc container lint + content assertions
+  → chunka rechunk (projectbluefin/actions/bootc-build/chunka)
   → cosign sign + SBOM attestation (projectbluefin/actions)
   → trivy scan (projectbluefin/actions)
-  → multi-arch manifest (projectbluefin/actions)
-  → GHCR push
+  → GHCR push (:testing from the testing branch; :stable on promotion)
 ```
+
+The BuildStream cache is snapshotted to `ghcr.io/<owner>/mjolnir-cache` as an
+OCI artifact between CI runs (`scripts/bst-cache-oci.sh`) so a run that changes
+one element does not rebuild the whole FSDK graph. Cache failures are
+non-fatal; the public read-only FSDK caches remain the primary source.
 
 Only the artifact-level `projectbluefin/actions` are reusable here: `scan-image`,
 `sign-and-publish`, `create-manifest`, `create-release`, `ghcr-cleanup`,
-`check-token-health`. The dnf/Containerfile-specific ones (`setup-runner` with
-dnf, `dnf-cache`, `rechunk`, `chunka`, `apply-pkg-intervals`) are not used.
+`check-token-health`, and `chunka` (buildah path, no RPM database). The
+dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
+`apply-pkg-intervals`) are not used.
 
 ## 11. Open issues
 
-- `varlink-httpd` for both x86_64 and aarch64 is built reproducibly by
-  `scripts/build-varlink.sh`; both sha256 pins live in `include/versions.yml`.
-- Full remote attestation (reports/ledger, `TPM2_Quote`) is out of scope for the
-  first image. The signed UKI gives a stable PCR 11 measurement and the composefs
-  digest is pinned inside the signed `.cmdline`; `mjolnir-fleet status` reports
-  both as evidence.
+- **The image has not yet been proven to boot.** `e2e.yml` is a merge-queue gate
+  that has never run; the signed-UKI changes to `testsuite/e2e.sh` (UEFI/OVMF
+  boot, no `--karg`, ESP cmdline inspection) are untested. This is the highest
+  remaining risk.
+- `quality.yml` (reproducibility, golden image diff, BST-native SBOM) has not
+  yet gone green.
+- Full remote attestation (reports/ledger, `TPM2_Quote`) is out of scope. The
+  signed UKI gives a stable PCR 11 measurement and the composefs digest is
+  pinned inside the signed `.cmdline`; `mjolnir-fleet status` reports both as
+  evidence. Nothing yet sets `attestation.verified` — that needs a verifier
+  controller.
 - Cilium and KubeStellar image digests must be refreshed when versions are bumped.
 - The FSDK kernel config needs Cilium's VXLAN/BPF options; verify with a boot test
   before treating the image as usable.
+- The x86_64 image builds and lints cleanly. An aarch64 image has never been
+  built (the arm64 varlink binary pin is present, but CI is x86_64-only).
 - Secure Boot key **enrollment** on real hardware is a manual, out-of-band step.
   The image ships a signed UKI plus a signed systemd-boot and `bootctl` accepts
   the DB key from `loader/keys/auto/` in setup mode; see `docs/SECURITY.md`.
   `bootc upgrade` with the sealed UKI must be validated on real hardware
-  (the highest-risk unknown — bootc marks sealed images experimental).
+  (bootc marks sealed images experimental).

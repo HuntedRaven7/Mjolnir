@@ -54,6 +54,35 @@ just vm           # boot that disk in QEMU with a serial console
 - The Cilium manifest was rendered from the pinned Helm chart with
   `kubeProxyReplacement=true`.
 
+## Branches and releases
+
+Mjolnir follows the dakota-style two-branch model (adapted from
+[projectbluefin/dakota](https://github.com/projectbluefin/dakota)):
+
+| Branch | Purpose | Image tag |
+| --- | --- | --- |
+| `testing` | Default branch and integration trunk. All development and automated checks land here. | `:testing` |
+| `stable` | Production pointer. Never rebuilt from source; updated by digest promotion only. | `:stable` |
+
+Development happens on `testing`. A successful build there publishes a
+keyless-signed `:testing` image and runs the blocking boot, content, plugin,
+multinode and quality gates. `main` is kept as a historical pointer and is not
+built or promoted.
+
+Stable is cut **on demand by a maintainer**, never on a schedule:
+
+```sh
+just release          # preflight only: resolve the tested digest, verify signature, compare to :stable
+just release --apply  # promote the tested digest to :stable and create a GitHub Release
+```
+
+Promotion is by **digest**, not by rebuilding: the release workflow resolves the
+`:testing` image for a specific (default: testing HEAD) commit SHA, verifies its
+cosign signature and SPDX attestation, and re-tags that exact digest as `:stable`.
+It never merges, force-pushes or rebuilds. Preflight is always the default;
+`--apply` is required to mutate `:stable`. See `docs/RELEASING.md` for the full
+procedure and recovery options.
+
 ## Troubleshooting
 
 - **"fetch needed" for many FSDK elements** is normal on a cold cache; the
@@ -75,6 +104,6 @@ just bst artifact pull --deps none \
 - **`bootc container lint` failures** usually mean the bootc mount layout or
   labels are wrong; check `base/os-stack.bst` integration commands.
 - **A missing library after `bootc switch`** is usually a stale `ld.so.cache`;
-  `ldconfig -r` must remain the last post-install step in `oci/mjolnir.bst`.
+  `ldconfig -r` must remain the last post-install step in `oci/rootfs.bst`.
 - **A node that never becomes Ready** usually means Cilium was not applied or
   the kernel lacks the BPF/ vxlan options; see `docs/ARCHITECTURE.md`.

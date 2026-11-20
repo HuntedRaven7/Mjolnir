@@ -9,9 +9,12 @@ workload propagation, and exposes a typed management API over mTLS Varlink —
 all with **no shell, no SSH daemon and no language interpreters** in the base
 image or in any active layer.
 
-> Status: **alpha**. The BuildStream build, OCI export, content assertions and
-> `bootc container lint` all pass. A full disk-install/QEMU boot test requires a
-> root user namespace; see [docs/BUILD.md](docs/BUILD.md).
+> Status: **alpha**. The x86_64 sealed image builds and passes `bootc container
+> lint`, content assertions, and the kind-based multinode propagation test. The
+> image ships a **signed, composefs-digest-pinned UKI** (Secure Boot ready; key
+> enrollment is a manual hardware step). A full disk-install/QEMU boot test has
+> not yet run in CI; see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the
+> open issues and [docs/BUILD.md](docs/BUILD.md) for the branch/release model.
 
 ## Design decisions
 
@@ -23,7 +26,7 @@ These were fixed at project start:
 | Shell/SSH/interpreters | Forbidden in base **and** in every enabled layer; helpers are compiled binaries |
 | Kubernetes | Full upstream kubeadm — control plane + workers, token join, Cilium CNI |
 | KubeStellar | Core propagation + Console, applied as pinned Kubernetes manifests |
-| WiFi | Client/station mode only (NetworkManager + wpa-supplicant), WPA2/WPA3-Personal |
+| WiFi | Client/station mode only (NetworkManager + wpa-supplicant), WPA2-PSK |
 | Root filesystem | Impermanent: `systemd.volatile=yes`, allowlisted state on `MjolnirState` (see [docs/IMPERMANENCE.md](docs/IMPERMANENCE.md)) |
 | Node management | Varlink-over-HTTPS with mTLS, plus the Kubernetes API |
 | First deliverable | A buildable, bootable image |
