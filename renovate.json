@@ -1,29 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":semanticCommits"
-  ],
-  "baseBranchPatterns": [
-    "main"
-  ],
+  "extends": ["config:recommended", ":semanticCommits"],
+  "baseBranchPatterns": ["main"],
   "rebaseWhen": "conflicted",
   "platformAutomerge": false,
-  "vulnerabilityAlerts": {
-    "enabled": false
-  },
-  "enabledManagers": [
-    "gomod",
-    "github-actions",
-    "custom.regex"
-  ],
+  "vulnerabilityAlerts": { "enabled": false },
+  "schedule": ["after 10pm and before 5am every day"],
+  "prConcurrentLimit": 5,
+  "timezone": "Etc/UTC",
+
+  "enabledManagers": ["gomod", "github-actions", "custom.regex"],
+
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track GitHub release versions declared in include/versions.yml",
-      "managerFilePatterns": [
-        "/include/versions\\.yml$/"
-      ],
+      "description": "Bump Kubernetes version; scripts/update_pins.py recomputes the binary sha256 values in CI",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
       "matchStrings": [
         "kubernetes-version:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
       ],
@@ -32,10 +24,48 @@
     },
     {
       "customType": "regex",
-      "description": "Track the pinned kured OCI image digest",
-      "managerFilePatterns": [
-        "/include/versions\\.yml$/"
+      "description": "Bump cri-tools version",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
+      "matchStrings": [
+        "crictl-version:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
       ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes-sigs/cri-tools"
+    },
+    {
+      "customType": "regex",
+      "description": "Bump containerd version",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
+      "matchStrings": [
+        "containerd-version:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "containerd/containerd"
+    },
+    {
+      "customType": "regex",
+      "description": "Bump runc version",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
+      "matchStrings": [
+        "runc-version:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "opencontainers/runc"
+    },
+    {
+      "customType": "regex",
+      "description": "Bump CNI plugins version",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
+      "matchStrings": [
+        "cni-plugins-version:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "containernetworking/plugins"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the pinned kured OCI image digest",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
       "matchStrings": [
         "kured-image-digest:\\s*\"(?<currentDigest>sha256:[a-f0-9]+)\""
       ],
@@ -43,44 +73,37 @@
       "depNameTemplate": "ghcr.io/kubereboot/kured"
     }
   ],
+
   "packageRules": [
     {
       "description": "SHA-pin GitHub Actions; only pin/digest bumps auto-merge",
-      "matchManagers": [
-        "github-actions"
-      ],
+      "matchManagers": ["github-actions"],
       "pinDigests": true
     },
     {
-      "description": "Digest-only updates carry no new code",
-      "matchUpdateTypes": [
-        "pin",
-        "pinDigest",
-        "digest"
-      ],
+      "description": "Patch/minor source updates auto-merge after CI; majors need review",
+      "matchManagers": ["custom.regex", "gomod"],
+      "matchUpdateTypes": ["patch", "minor", "pin", "pinDigest", "digest"],
       "automerge": true,
       "automergeType": "pr",
       "automergeStrategy": "squash"
     },
     {
-      "description": "Review BuildStream/FSDK source and binary pin bumps manually",
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "automerge": false,
-      "groupName": "pinned sources"
+      "description": "Major source updates always require review",
+      "matchManagers": ["custom.regex", "gomod"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      "description": "Keep FSDK junction bumps grouped and reviewed",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["elements/freedesktop-sdk.bst"],
+      "groupName": "fsdk junction"
     },
     {
       "description": "Group shared action bumps atomically",
-      "matchPackageNames": [
-        "projectbluefin/actions/**"
-      ],
+      "matchPackageNames": ["projectbluefin/actions/**"],
       "groupName": "projectbluefin actions"
     }
-  ],
-  "schedule": [
-    "after 10pm and before 5am every day"
-  ],
-  "prConcurrentLimit": 5,
-  "timezone": "Etc/UTC"
+  ]
 }

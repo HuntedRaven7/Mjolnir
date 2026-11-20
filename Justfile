@@ -48,6 +48,7 @@ lint:
 test:
     python3 tests/test_units.py
     python3 tests/test_installer.py
+    python3 tests/test_update_pins.py
     python3 tests/test_pins.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"
     python3 tests/test_boot_assets.py "{{image_name}}:{{image_tag}}"

@@ -78,6 +78,8 @@ full pipeline.
 - CI rechunks the exported OCI image with
   `projectbluefin/actions/bootc-build/chunka` for update-friendly layers.
 - `renovate.json` tracks Go modules, GitHub Actions and pinned source versions.
+- `scripts/update_pins.py` and a weekly workflow recompute source hashes/refs;
+  see [docs/UPDATES.md](docs/UPDATES.md).
 
 ## References
 
