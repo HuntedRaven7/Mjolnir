@@ -80,6 +80,18 @@ jobs:
           exit-code: '0'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Rechunk the image into update-friendly OCI layers using the shared
+      # action. The BuildStream/FSDK image has no RPM database, so we use the
+      # buildah path (no fakecap xattr manifest) and skip
+      # apply-pkg-intervals. force-compression stays false to keep the
+      # ostree.components layer annotations intact.
+      - name: Rechunk image with chunkah
+        uses: projectbluefin/actions/bootc-build/chunka@v1
+        with:
+          source-image: localhost/mjolnir:latest
+          max-layers: "128"
+          source-date-epoch: auto
+
       - name: Push image
         if: github.event_name != 'pull_request'
         run: |

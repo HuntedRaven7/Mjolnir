@@ -1,0 +1,59 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "baseBranchPatterns": ["main"],
+  "rebaseWhen": "conflicted",
+  "platformAutomerge": false,
+  "vulnerabilityAlerts": { "enabled": false },
+
+  "enabledManagers": ["gomod", "github-actions", "custom.regex"],
+
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track GitHub release versions declared in include/versions.yml",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
+      "matchStrings": [
+        "kubernetes-version:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes/kubernetes"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the pinned kured OCI image digest",
+      "managerFilePatterns": ["/include/versions\\.yml$/"],
+      "matchStrings": [
+        "kured-image-digest:\\s*\"(?<currentDigest>sha256:[a-f0-9]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/kubereboot/kured"
+    }
+  ],
+
+  "packageRules": [
+    {
+      "description": "SHA-pin GitHub Actions; only pin/digest bumps auto-merge",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    },
+    {
+      "description": "Digest-only updates carry no new code",
+      "matchUpdateTypes": ["pin", "pinDigest", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Review BuildStream/FSDK source and binary pin bumps manually",
+      "matchManagers": ["custom.regex"],
+      "automerge": false,
+      "groupName": "pinned sources"
+    },
+    {
+      "description": "Group shared action bumps atomically",
+      "matchPackageNames": ["projectbluefin/actions/**"],
+      "groupName": "projectbluefin actions"
+    }
+  ]
+}

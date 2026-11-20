@@ -70,6 +70,14 @@ just vm             # boot that image in QEMU
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for prerequisites and the
 full pipeline.
 
+## Installer and CI
+
+- `installer/` contains a static Go installer and a build script for a minimal
+  UEFI live ISO that pulls the image from GHCR and runs `bootc install to-disk`.
+- CI rechunks the exported OCI image with
+  `projectbluefin/actions/bootc-build/chunka` for update-friendly layers.
+- `renovate.json` tracks Go modules, GitHub Actions and pinned source versions.
+
 ## References
 
 - [projectbluefin/server](https://github.com/projectbluefin/server) — FSDK/BuildStream

@@ -47,6 +47,7 @@ lint:
 # Content assertions (no shell/interpreter, no SUID, pinned manifests).
 test:
     python3 tests/test_units.py
+    python3 tests/test_installer.py
     python3 tests/test_pins.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"
     python3 tests/test_boot_assets.py "{{image_name}}:{{image_tag}}"
@@ -79,3 +80,7 @@ vm:
 clean:
     rm -rf .build-out build
     {{podman}} rmi "{{image_name}}:{{image_tag}}" || true
+
+# Build the minimal live installer ISO (requires xorriso and mtools).
+iso:
+    ./installer/build-iso.sh
