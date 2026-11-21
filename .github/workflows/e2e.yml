@@ -14,7 +14,7 @@ on:
       image:
         description: "Image ref to test"
         type: string
-        default: ghcr.io/HuntedRaven7/Mjolnir:testing
+        default: ghcr.io/huntedraven7/mjolnir:testing
 
 permissions: {}
 
@@ -58,7 +58,9 @@ jobs:
         env:
           INPUT_IMAGE: ${{ inputs.image }}
         run: |
-          ref="${INPUT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY%%/*}/$(basename "$GITHUB_REPOSITORY"):testing}"
+          # GHCR requires a lowercase repository path; github.repository
+          # preserves the account's mixed case (HuntedRaven7/Mjolnir).
+          ref="${INPUT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY,,}:testing}"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
       - name: Run E2E checks

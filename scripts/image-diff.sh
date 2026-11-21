@@ -7,7 +7,7 @@ set -euo pipefail
 read -r -a PODMAN <<< "${PODMAN:-podman}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OLD="${1:-ghcr.io/HuntedRaven7/Mjolnir:testing}"
+OLD="${1:-ghcr.io/huntedraven7/mjolnir:testing}"
 NEW="${2:-localhost/mjolnir:latest}"
 OUT="${3:-pr-comment.md}"
 WORK=$(mktemp -d)

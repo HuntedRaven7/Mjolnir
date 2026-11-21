@@ -39,7 +39,7 @@ def main() -> int:
         return 1
 
     cfg = {
-        "image": "ghcr.io/HuntedRaven7/Mjolnir:latest",
+        "image": "ghcr.io/huntedraven7/mjolnir:latest",
         "disk": "/dev/vda",
         "role": "worker",
         "ssid": "test",

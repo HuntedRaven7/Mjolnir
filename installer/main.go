@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const defaultImage = "ghcr.io/HuntedRaven7/Mjolnir:stable"
+const defaultImage = "ghcr.io/huntedraven7/mjolnir:stable"
 
 type config struct {
 	Image      string `json:"image"`

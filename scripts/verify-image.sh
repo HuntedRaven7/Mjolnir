@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verify image signature, legacy .sig tag and SBOM attestation.
 set -euo pipefail
-IMAGE="${1:-ghcr.io/HuntedRaven7/Mjolnir:testing}"
+IMAGE="${1:-ghcr.io/huntedraven7/mjolnir:testing}"
 DIGEST="${2:-}"
 OWNER="${GITHUB_REPOSITORY_OWNER:-HuntedRaven7}"
 IDENTITY="^https://github\.com/${OWNER}/Mjolnir/\.github/workflows/build\.yml@refs/heads/(testing|gh-readonly-queue/testing/.+)$"
