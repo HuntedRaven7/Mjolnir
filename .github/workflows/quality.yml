@@ -13,7 +13,7 @@ jobs:
   image-diff:
     name: Golden image diff
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -50,7 +50,7 @@ jobs:
   reproducibility:
     name: Reproducibility
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
   sbom:
     name: BST-native SPDX SBOM
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
