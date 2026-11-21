@@ -36,7 +36,9 @@ podman pull "$IMAGE"
 
 echo "==> installing image to disk"
 rm -f "$DISK" "$SERIAL"
-fallocate -l 20G "$DISK"
+# Sparse allocation: fallocate would consume the full size on the runner's
+# limited root filesystem. bootc only writes the sectors it needs.
+truncate -s 20G "$DISK"
 podman run --rm --privileged --pid=host \
   -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
   -v "$BUILD:/mnt/e2e" \
