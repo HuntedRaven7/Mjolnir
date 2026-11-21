@@ -13,7 +13,7 @@ jobs:
   image-diff:
     name: Golden image diff
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -22,7 +22,7 @@ jobs:
     env:
       PODMAN: "sudo podman"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: taiki-e/install-action@v2
         with:
           tool: just
@@ -31,7 +31,7 @@ jobs:
       - name: Generate diff
         run: just image-diff new=localhost/mjolnir:latest out=pr-comment.md
       - name: Post comment
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const fs = require('fs');
@@ -50,10 +50,10 @@ jobs:
   reproducibility:
     name: Reproducibility
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: taiki-e/install-action@v2
         with:
           tool: just
@@ -63,7 +63,7 @@ jobs:
   sbom:
     name: BST-native SPDX SBOM
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -71,14 +71,14 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: taiki-e/install-action@v2
         with:
           tool: just,cosign,oras
       - name: Generate SBOM
         run: just sbom
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mjolnir-spdx
           path: sbom_out/mjolnir.spdx.json
