@@ -130,6 +130,11 @@ repro:
 image-diff old="ghcr.io/HuntedRaven7/Mjolnir:testing" new="localhost/mjolnir:latest" out="pr-comment.md":
     ./scripts/image-diff.sh "{{old}}" "{{new}}" "{{out}}"
 
+# Generate a ready-to-import Console card, auto-detecting the Console origin.
+plugin-card:
+    chmod +x "{{justfile_directory()}}/scripts/install-console-card.sh"
+    "{{justfile_directory()}}/scripts/install-console-card.sh"
+
 # Cut a stable release (dakota-style digest promotion). Dry-run by default:
 #   just release                       # preflight only
 #   just release --apply               # promote + cut GitHub Release

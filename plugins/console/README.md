@@ -35,16 +35,32 @@ paths: a **Tier 2 dynamic card** that reads `/api/mcp/custom-resources`, and a
 2. Create a token for the `mjolnir-fleet` ServiceAccount and pass the kubeconfig
    to every node as the systemd credential `fleet-kubeconfig` (base64 or plain
    YAML text). The publisher writes it to `/run/mjolnir/fleet.kubeconfig`.
-3. Generate the card with your Console's externally reachable origin:
+3. Generate the card:
 
    ```sh
-   CONSOLE_ORIGIN=https://console.example.com python3 build-card.py
+   just plugin-card
    ```
+
+   This auto-detects the Console origin from `CONSOLE_ORIGIN`, the
+   `kubestellar-console` Helm release's Ingress host, or a Kubernetes
+   Ingress/Route whose host contains `console`. If none is found it exits with
+   a clear message asking for `CONSOLE_ORIGIN` explicitly.
 
 4. In Console: **Dashboard → Add Card → Custom / Card Factory → Import JSON**,
    select `card.json`.
+
 5. Optionally submit `mission.json` to `kubestellar/console-kb` under `fixes/`
    and add an entry to its `fixes/index.json` so it appears in Mission Browser.
+
+Why is the origin needed at all? Tier 2 dynamic card code runs in a hardened
+sandbox with no `window`, `document` or `location`, and `useCardFetch` must call
+an absolute URL through Console's `/api/card-proxy` (which rejects private IPs).
+A card therefore cannot discover its own origin at runtime. Console also has no
+card-import API, so the one UI import click cannot be automated locally. A truly
+zero-config install requires an in-tree card in
+`kubestellar/console-marketplace` that calls the Console backend directly —
+that is the upstream issue. `just plugin-card` removes the origin guesswork;
+the single UI import remains.
 
 ## Operations via Varlink
 
