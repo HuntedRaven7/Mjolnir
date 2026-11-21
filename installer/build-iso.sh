@@ -23,6 +23,10 @@ for tool in go podman mformat mcopy mmd mksquashfs xorriso; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
 
+# Always start from a clean staging tree: podman cp fails when a destination
+# from an earlier layout (or an interrupted run) still exists, e.g. a regular
+# file where it wants to create a directory.
+rm -rf "$BUILD"
 mkdir -p "$BUILD"/{esp/EFI/BOOT,esp/loader/entries,esp/LiveOS,squashfs/bin,squashfs/opt,squashfs/etc}
 mkdir -p "$OUT"
 
