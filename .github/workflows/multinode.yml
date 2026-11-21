@@ -20,12 +20,12 @@ concurrency:
 jobs:
   propagation:
     name: KubeStellar WDS<->ITS propagation
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # python3 is preinstalled on ubuntu-24.04 and the harness uses only the
       # stdlib (json/sys), so no setup-python step (and no action pin) is needed.
@@ -41,7 +41,7 @@ jobs:
 
       - name: Upload sync-agent log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: multinode-sync-agent-log
           path: ${{ runner.temp }}/mjolnir-multinode/sync-agent.log

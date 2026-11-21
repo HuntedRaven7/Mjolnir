@@ -2,9 +2,12 @@ name: e2e
 
 # Boot/health/provenance gate, adapted from projectbluefin/testsuite's wrapper
 # pattern. Drives our shell-less image over the serial console + Varlink instead
-# of injecting an SSH user into a disposable disk copy. Written as a merge-queue
-# gate, but merge queue is not enabled yet and this workflow has never run.
+# of injecting an SSH user into a disposable disk copy. Also runs on pushes to
+# testing so the signed-UKI boot path is actually exercised; it is intentionally
+# NOT a required status check until it has passed reliably.
 on:
+  push:
+    branches: [testing]
   merge_group:
   workflow_dispatch:
     inputs:
@@ -22,14 +25,14 @@ concurrency:
 jobs:
   e2e:
     name: boot + health + provenance
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
       packages: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: taiki-e/install-action@v2
         with:
@@ -58,7 +61,7 @@ jobs:
 
       - name: Upload serial log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-serial-log
           path: build/e2e/serial.log

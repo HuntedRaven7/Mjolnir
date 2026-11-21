@@ -1,0 +1,47 @@
+name: auto-pins
+
+# Renovate bumps version keys in include/versions.yml but cannot recompute the
+# dependent sha256 pins: the Renovate GitHub App does not execute
+# postUpgradeTasks commands. This workflow fills the gap. On a PR that changes
+# a version key it recomputes ONLY the binary sha256s (git-ref bumps belong to
+# the weekly update-elements workflow) and pushes the result to the PR branch.
+# We guard with `if git diff --quiet` so the resulting synchronize event does
+# not loop.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [testing]
+    paths: ['include/versions.yml']
+
+permissions: {}
+
+jobs:
+  recompute:
+    # Fork PRs cannot be pushed to by the default token; leave those to a
+    # maintainer (the build will fail with a clear sha256 mismatch).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Recompute binary sha256 pins
+        run: python3 scripts/update_pins.py --binary-only
+
+      - name: Push updated pins to the PR branch
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- include/versions.yml; then
+            echo "Binary pins are already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add include/versions.yml
+          git commit -m "chore(deps): recompute sha256 pins after version bump"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
