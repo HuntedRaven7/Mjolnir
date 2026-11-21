@@ -40,36 +40,20 @@ podman rm -f mjolnir-iso-root >/dev/null 2>&1 || true
 CID=$(podman run -d --name mjolnir-iso-root "$BASE" sleep infinity)
 trap 'podman rm -f "$CID" >/dev/null 2>&1 || true' EXIT
 ROOTFS="$BUILD/squashfs"
-# The bootc image hardlinks its /usr files into sysroot/ostree/repo, so a
-# selective `podman export | tar -x` cannot materialise them. podman cp reads
-# through the container filesystem and resolves the hardlinks.
-mkdir -p "$ROOTFS/usr/bin" "$ROOTFS/usr/lib" "$ROOTFS/etc"
-podman cp "$CID:/usr/lib/systemd" "$ROOTFS/usr/lib/systemd"
-for path in usr/bin/podman usr/bin/skopeo usr/bin/bootc \
-            usr/bin/mount usr/bin/umount usr/bin/ip usr/bin/nmcli usr/bin/lsblk \
-            etc/os-release; do
-  podman cp "$CID:/$path" "$ROOTFS/$path"
-done
+mkdir -p "$ROOTFS"
+# Stage the complete base filesystem. Cherry-picking binaries left the live
+# root without helpers referenced by systemd units (lvm, udevadm,
+# systemd-tmpfiles, hwdb, ...), which produced a stream of failed units on
+# real hardware. The full export resolves the base image's ostree hardlinks.
+podman export "$CID" | tar -x -C "$ROOTFS"
+# The ostree object store is only needed to resolve those hardlinks.
+rm -rf "$ROOTFS/sysroot"
+# Documentation and locales are not needed in an installer.
+rm -rf "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/man" \
+  "$ROOTFS/usr/share/locale" "$ROOTFS/usr/share/help" "$ROOTFS/var/cache"
+
 # The base image enables sshd; it has no place in the installer live root.
 find "$ROOTFS/usr/lib/systemd/system" -name 'sshd*' -delete
-# systemd's switch-root checks for an OS tree (os-release, /init) and then
-# executes /sbin/init in the new root.
-ln -sfn usr/lib/systemd/systemd "$ROOTFS/init"
-mkdir -p "$ROOTFS/sbin"
-ln -sfn ../usr/lib/systemd/systemd "$ROOTFS/sbin/init"
-ln -sfn usr/bin "$ROOTFS/bin"
-ln -sfn usr/lib "$ROOTFS/lib"
-ln -sfn usr/lib64 "$ROOTFS/lib64"
-
-# The staged binaries are dynamically linked; copy only the shared objects
-# they actually need instead of the whole (269 MB) /usr/lib64 tree.
-LIBS=$(podman exec "$CID" bash -c 'for b in /usr/lib/systemd/systemd /usr/bin/podman /usr/bin/skopeo /usr/bin/bootc /usr/bin/mount /usr/bin/umount /usr/bin/ip /usr/bin/nmcli /usr/bin/lsblk; do ldd "$b" 2>/dev/null; done | grep -oE "/(lib64|usr/lib64)/[^ ]+" | sort -u')
-for lib in $LIBS; do
-  rel=${lib#/lib64/}
-  rel=${rel#/usr/lib64/}
-  mkdir -p "$ROOTFS/usr/lib64/$(dirname "$rel")"
-  podman cp "$CID:$lib" "$ROOTFS/usr/lib64/$rel"
-done
 
 cat > "$ROOTFS/etc/mjolnir-installer.json" <<EOF
 {"image":"$IMAGE","filesystem":"btrfs"}
@@ -93,11 +77,6 @@ for module in 90dmsquash-live 99img-lib; do
 done
 KVER=$(podman exec "$CID" bash -c 'ls /usr/lib/modules | head -n1')
 [ -n "$KVER" ] || { echo "no kernel version in BASE_IMAGE=$BASE" >&2; exit 1; }
-# The live root needs its own module tree: NVMe, MMC and USB storage are
-# modules, and after switch-root udev must be able to load the driver for the
-# node's actual disk. Without this the installer sees no target disks.
-mkdir -p "$ROOTFS/usr/lib/modules"
-podman cp "$CID:/usr/lib/modules/$KVER" "$ROOTFS/usr/lib/modules/$KVER"
 # --no-hostonly is required: dmsquash-live refuses to run in host-only mode.
 # isofs is needed to read the ISO once the firmware hands over to the kernel.
 podman exec "$CID" bash -c \
@@ -116,11 +95,14 @@ default mjolnir
 timeout 5
 editor no
 EOF
+# selinux=0: the full base brings its SELinux policy, but the squashfs-backed
+# live root cannot set the security xattrs systemd wants and it aborts with
+# "Failed to allocate manager object". SELinux is not needed in the installer.
 cat > "$BUILD/esp/loader/entries/mjolnir.conf" <<'EOF'
 title Mjolnir Installer
 linux /vmlinuz
 initrd /initrd.img
-options console=tty0 console=ttyS0,115200 root=live:CDLABEL=MJOLNIR_INSTALL rd.live.dir=/LiveOS rd.live.squashimg=squashfs.img rd.live.overlay.overlayfs=1
+options console=tty0 console=ttyS0,115200 root=live:CDLABEL=MJOLNIR_INSTALL rd.live.dir=/LiveOS rd.live.squashimg=squashfs.img rd.live.overlay.overlayfs=1 selinux=0
 EOF
 # mformat needs an existing image file, and xorriso resolves -e relative to
 # the ISO root, so the FAT image must live inside $BUILD/esp. It has to hold
