@@ -16,7 +16,8 @@ halves.
   the kured image digest (Docker registry)
 
 When a version key changes, Renovate opens a PR. It does **not** change the
-matching sha256 values — those are recomputed by the workflow below.
+matching sha256 values. The Renovate GitHub App cannot run `postUpgradeTasks`
+commands, so a separate workflow handles that (see below).
 
 ## What recomputes the pins
 
@@ -29,13 +30,24 @@ matching sha256 values — those are recomputed by the workflow below.
 - By default only same-major (patch/minor) git ref bumps are applied. Pass
   `--allow-major` to opt into a major bump.
 - `--check` exits 1 when pins would change (useful in CI).
+- `--binary-only` recomputes only the binary sha256s and leaves git refs alone.
 
 Run it locally:
 
 ```sh
-python3 scripts/update_pins.py --check   # verify pins are current
-python3 scripts/update_pins.py           # rewrite include/versions.yml and .bst refs
+python3 scripts/update_pins.py --check              # verify all pins are current
+python3 scripts/update_pins.py --binary-only --check # verify only binary hashes
+python3 scripts/update_pins.py                      # rewrite versions.yml and .bst refs
 ```
+
+## Renovate PR workflow
+
+`.github/workflows/auto-pins.yml` runs on PRs that change `include/versions.yml`.
+It calls `scripts/update_pins.py --binary-only` and pushes the recomputed hashes
+back to the PR branch, so a Renovate version bump and its sha256 pins land
+together. Git-ref bumps are intentionally left to the weekly workflow below.
+The workflow only runs for same-repository PRs (the default token cannot push
+to forks), and stops after one commit because it checks `git diff --quiet`.
 
 ## Scheduled workflow
 

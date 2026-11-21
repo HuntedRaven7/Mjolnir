@@ -126,10 +126,34 @@ def recompute_binary(ver_key: str, prefix: str, template: str, versions: dict[st
     return updates
 
 
+def write_results(versions: dict[str, str], new_versions: dict[str, str],
+                  changes: list[str], args: argparse.Namespace) -> int:
+    """Write recomputed versions.yml and report changes (or fail with --check)."""
+    if not args.check:
+        text = VERSIONS.read_text()
+        for key, value in new_versions.items():
+            if key in versions and versions[key] != value:
+                text = set_key(VERSIONS, key, value, text=text)
+        if text != VERSIONS.read_text():
+            VERSIONS.write_text(text)
+    if not changes:
+        print("All pins are current")
+        return 0
+    print("Updated pins:")
+    for line in changes:
+        print(f"  - {line}")
+    if args.check:
+        return 1
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="exit 1 if pins would change")
     ap.add_argument("--allow-major", action="store_true", help="allow major-version bumps for git refs")
+    ap.add_argument("--binary-only", action="store_true",
+                    help="only recompute binary sha256 pins; do not update git refs "
+                         "(used by the PR auto-pins workflow, where ref bumps are handled by the weekly workflow)")
     args = ap.parse_args()
 
     versions = get_versions()
@@ -146,6 +170,9 @@ def main() -> int:
                 if new_versions.get(key) != value:
                     changes.append(f"{key}: {new_versions.get(key)} -> {value}")
                     new_versions[key] = value
+
+    if args.binary_only:
+        return write_results(versions, new_versions, changes, args)
 
     # FSDK git ref from the pinned branch.
     m = re.match(r"^freedesktop-sdk-([0-9.]+)-0-g", versions["fsdk-ref"])
@@ -180,9 +207,10 @@ def main() -> int:
             old = re.search(r"^  ref: (\S+)$", text, re.MULTILINE)
             if old and old.group(1) != bootc_ref:
                 changes.append(f"bootc ref: {old.group(1)} -> {bootc_ref}")
-                BOOTC_ELEMENT.write_text(
-                    re.sub(r"^  ref: \S+$", f"  ref: {bootc_ref}", text, count=1, flags=re.MULTILINE)
-                )
+                if not args.check:
+                    BOOTC_ELEMENT.write_text(
+                        re.sub(r"^  ref: \S+$", f"  ref: {bootc_ref}", text, count=1, flags=re.MULTILINE)
+                    )
     except Exception as exc:
         print(f"warning: bootc ref lookup failed: {exc}", file=sys.stderr)
 
@@ -200,29 +228,14 @@ def main() -> int:
             old = re.search(r"^  ref: (\S+)$", text, re.MULTILINE)
             if old and old.group(1) != ref:
                 changes.append(f"{element.name}: {old.group(1)} -> {ref}")
-                element.write_text(
-                    re.sub(r"^  ref: \S+$", f"  ref: {ref}", text, count=1, flags=re.MULTILINE)
-                )
+                if not args.check:
+                    element.write_text(
+                        re.sub(r"^  ref: \S+$", f"  ref: {ref}", text, count=1, flags=re.MULTILINE)
+                    )
         except Exception as exc:
             print(f"warning: {element.name} ref lookup failed: {exc}", file=sys.stderr)
 
-    # Write versions.yml with all recomputed values.
-    text = VERSIONS.read_text()
-    for key, value in new_versions.items():
-        if key in versions and versions[key] != value:
-            text = set_key(VERSIONS, key, value, text=text)
-    if text != VERSIONS.read_text():
-        VERSIONS.write_text(text)
-
-    if not changes:
-        print("All pins are current")
-        return 0
-    print("Updated pins:")
-    for line in changes:
-        print(f"  - {line}")
-    if args.check:
-        return 1
-    return 0
+    return write_results(versions, new_versions, changes, args)
 
 
 if __name__ == "__main__":
