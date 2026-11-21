@@ -2,13 +2,17 @@ name: e2e
 
 # Boot/health/provenance gate, adapted from projectbluefin/testsuite's wrapper
 # pattern. Drives our shell-less image over the serial console + Varlink instead
-# of injecting an SSH user into a disposable disk copy. Also runs on pushes to
-# testing so the signed-UKI boot path is actually exercised; it is intentionally
-# NOT a required status check until it has passed reliably.
+# of injecting an SSH user into a disposable disk copy.
+#
+# Runs after build has pushed :testing, not on the push itself: the two
+# workflows used to start together, so e2e tried to pull an image that the
+# build had not produced yet. It is intentionally NOT a required status check
+# until it has passed reliably.
 on:
-  push:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
     branches: [testing]
-  merge_group:
   workflow_dispatch:
     inputs:
       image:
@@ -31,8 +35,12 @@ jobs:
       contents: read
       packages: read
       id-token: write
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Test the harness from the commit that produced the image.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: taiki-e/install-action@v2
         with:
@@ -53,6 +61,18 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The published :testing package is private, so an anonymous pull gets a
+      # 403 on the bearer-token request. Log in as root: podman, skopeo and
+      # cosign then all find the credentials in the same auth file.
+      - name: Log in to GHCR
+        env:
+          REGISTRY_AUTH_FILE: /run/containers/0/auth.json
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | sudo podman login --authfile "$REGISTRY_AUTH_FILE" \
+            ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Resolve image
         id: image
         env:
@@ -67,9 +87,11 @@ jobs:
         env:
           IMAGE: ${{ steps.image.outputs.ref }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          REGISTRY_AUTH_FILE: /run/containers/0/auth.json
         # sudo -E is ignored on hosted runners; pass values explicitly instead.
         run: |
           sudo env IMAGE="${IMAGE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
+            REGISTRY_AUTH_FILE="${REGISTRY_AUTH_FILE}" \
             ./testsuite/e2e.sh
 
       - name: Upload serial log on failure

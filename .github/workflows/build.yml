@@ -126,8 +126,8 @@ jobs:
           source-date-epoch: auto
 
       # The pushed :testing image is the candidate for the manual :stable
-      # promotion in execute-release.yml. The E2E job in e2e.yml is written to
-      # test it as well, but merge queue is not enabled yet.
+      # promotion in execute-release.yml. e2e.yml runs after this push via
+      # workflow_run, so :testing always exists by the time it pulls.
       # Compare the newly built image with the previously published :testing
       # image. Runs only on pushes to testing (not PRs) and before the push, so
       # the previous :testing digest is still the baseline.
