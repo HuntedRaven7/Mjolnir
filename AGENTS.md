@@ -25,6 +25,11 @@ changing anything that affects the image content.
    `include/versions.yml`; do not duplicate them in units or docs.
 8. **Device paths are never hardcoded** in boot configuration; use discoverable
    partitions and `/dev/disk/by-*`.
+9. **Every change an agent makes goes through a pull request.** Agents must
+   work on a topic branch, commit there, open a PR targeting `testing`, and let
+   CI run. Agents must never push directly to `testing`, `stable` or `main`.
+   The only exception is an explicitly requested `just release --apply`, which
+   is a maintainer operation, not an agent code change.
 
 ## Build and test commands
 
@@ -45,6 +50,10 @@ bst2 container image declared in the Justfile.
 
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`, `chore:`).
 - Stage explicitly: never `git add -A` or `git add .`.
+- Agents open a PR for **every** change (see hard rule 9); never push straight
+  to a long-lived branch.
+- `testing` is the integration trunk and PR target; `stable` is promoted by
+  digest only (see [docs/RELEASING.md](docs/RELEASING.md)).
 - Every PR must keep `just validate`, `just test` and `just lint` green.
 
 ## Boundaries
