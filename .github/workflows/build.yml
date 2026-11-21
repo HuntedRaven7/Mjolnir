@@ -105,7 +105,7 @@ jobs:
         run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest
 
       - name: Scan image
-        uses: projectbluefin/actions/bootc-build/scan-image@v1
+        uses: projectbluefin/actions/bootc-build/scan-image@3ab43283cb0ec8bc62aa18208ccc4978a0fd4c44 # v1
         continue-on-error: true
         with:
           input: /tmp/scan-image.tar
@@ -119,7 +119,7 @@ jobs:
       # apply-pkg-intervals. force-compression stays false to keep the
       # ostree.components layer annotations intact.
       - name: Rechunk image with chunkah
-        uses: projectbluefin/actions/bootc-build/chunka@v1
+        uses: projectbluefin/actions/bootc-build/chunka@3ab43283cb0ec8bc62aa18208ccc4978a0fd4c44 # v1
         with:
           source-image: localhost/mjolnir:latest
           max-layers: "128"
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload digest
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mjolnir-digest
           path: /tmp/mjolnir-digest.txt
@@ -163,7 +163,7 @@ jobs:
 
       - name: Sign and attest
         if: github.event_name != 'pull_request'
-        uses: projectbluefin/actions/bootc-build/sign-and-publish@v1
+        uses: projectbluefin/actions/bootc-build/sign-and-publish@3ab43283cb0ec8bc62aa18208ccc4978a0fd4c44 # v1
         with:
           image: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir
           digest: ${{ steps.push.outputs.digest }}
@@ -180,7 +180,7 @@ jobs:
 
       - name: Prune old images
         if: github.event_name != 'pull_request'
-        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@v1
+        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@3ab43283cb0ec8bc62aa18208ccc4978a0fd4c44 # v1
         with:
           image-name: mjolnir
           github-token: ${{ secrets.GITHUB_TOKEN }}
