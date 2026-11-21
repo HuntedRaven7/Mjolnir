@@ -34,6 +34,13 @@ def main() -> int:
         for lineno, line in enumerate(manifest.read_text().splitlines(), 1):
             if "image:" in line and "@sha256:" not in line:
                 errors.append(f"{manifest.relative_to(ROOT)}:{lineno}: unpinned image")
+
+    # Lid switches must never suspend an unattended node.
+    logind = ROOT / "files/config/logind/50-ignore-lid.conf"
+    logind_text = logind.read_text() if logind.is_file() else ""
+    for key in ("HandleLidSwitch", "HandleLidSwitchExternalPower", "HandleLidSwitchDocked"):
+        if not re.search(rf"^{key}\s*=\s*ignore\s*$", logind_text, re.MULTILINE):
+            errors.append(f"{logind.relative_to(ROOT)}: {key} is not set to ignore")
     if errors:
         print("Static configuration checks FAILED:", file=__import__("sys").stderr)
         for e in errors:

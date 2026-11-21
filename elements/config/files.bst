@@ -25,6 +25,8 @@ config:
       "${root}/usr/lib/repart.d/20-mjolnir-state.conf"
     install -Dm644 /config/journald/10-persistent.conf \
       "${root}/usr/lib/systemd/journald.conf.d/10-persistent.conf"
+    install -Dm644 /config/logind/50-ignore-lid.conf \
+      "${root}/usr/lib/systemd/logind.conf.d/50-ignore-lid.conf"
     install -Dm644 /config/tmpfiles.d/mjolnir-volatile.conf \
       "${root}/usr/lib/tmpfiles.d/mjolnir-volatile.conf"
     install -Dm644 /config/systemd/var-lib-mjolnir.mount \

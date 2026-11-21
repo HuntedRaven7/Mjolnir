@@ -95,6 +95,10 @@ def check(image: str) -> list[str]:
     units = [p for p in paths if p.startswith("usr/lib/systemd/system/")]
     if any("sshd" in u for u in units):
         errors.append("sshd unit present")
+
+    lid_conf = "usr/lib/systemd/logind.conf.d/50-ignore-lid.conf"
+    if lid_conf not in pathset:
+        errors.append(f"missing required config: /{lid_conf}")
     return errors
 
 
