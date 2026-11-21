@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Produce a readable /usr file-list diff between the published image and the
-# locally built one, for PR comments. Never executes code from either image.
+# locally built one. Never executes code from either image. Honours $PODMAN
+# (e.g. "sudo podman") so it sees images in the same store the build loaded.
 set -euo pipefail
+
+read -r -a PODMAN <<< "${PODMAN:-podman}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OLD="${1:-ghcr.io/HuntedRaven7/Mjolnir:testing}"
@@ -10,12 +13,25 @@ OUT="${3:-pr-comment.md}"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-podman pull -q "$OLD" >/dev/null 2>&1 || true
+"${PODMAN[@]}" pull -q "$OLD" >/dev/null 2>&1 || true
+# On the very first build there is no published image to compare against.
+# Report that instead of failing the job.
+if ! "${PODMAN[@]}" image exists "$OLD" 2>/dev/null; then
+  {
+    echo '<!-- mjolnir-image-diff -->'
+    echo "### /usr file-list diff"
+    echo ''
+    echo "No previously published image found at \`$OLD\` — nothing to compare."
+  } > "$OUT"
+  cat "$OUT" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+  echo "wrote $OUT (no baseline)"
+  exit 0
+fi
 for pair in "old:$OLD" "new:$NEW"; do
   name=${pair%%:*}; ref=${pair#*:}
-  cid=$(podman create --pull=never "$ref")
-  podman export "$cid" > "$WORK/$name.tar"
-  podman rm -f "$cid" >/dev/null
+  cid=$("${PODMAN[@]}" create --pull=never "$ref")
+  "${PODMAN[@]}" export "$cid" > "$WORK/$name.tar"
+  "${PODMAN[@]}" rm -f "$cid" >/dev/null
   tar -tf "$WORK/$name.tar" \
     | sed -e 's#^./##' \
     | grep -Ev '^(proc|sys|dev)(/|$)' \
@@ -27,7 +43,7 @@ done
 
 {
   echo '<!-- mjolnir-image-diff -->'
-  echo "### /usr file-list diff (published → this PR)"
+  echo "### /usr file-list diff (published → this build)"
   echo "Files: old=$(wc -l < "$WORK/old.files") new=$(wc -l < "$WORK/new.files")"
   echo ''
   echo '<details><summary>Removed files</summary>'

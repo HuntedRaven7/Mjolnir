@@ -96,6 +96,9 @@ match. This is a weekly CI check.
 
 ## Golden image diff
 
-PRs post a `/usr` file-list diff between the published image and the PR build
-as a collapsed GitHub comment (`scripts/image-diff.sh`). Volatile paths
+On every push to `testing`, `build.yml` emits a `/usr` file-list diff between
+the previously published `:testing` image and the new build
+(`scripts/image-diff.sh`, run before the push so the old image is still the
+baseline). It is written to the job summary and uploaded as the
+`mjolnir-image-diff` artifact. It does not run on pull requests. Volatile paths
 (`machine-id`, `resolv.conf`, logs, `run`, whiteouts) are excluded.
