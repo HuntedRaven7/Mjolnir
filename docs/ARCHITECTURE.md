@@ -182,11 +182,12 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
 
 ## 11. Open issues
 
-- **The image has not yet been proven to boot.** `e2e.yml` is triggered by
-  `merge_group`/manual dispatch, but merge queue is not enabled so it has never
-  run; the signed-UKI changes to `testsuite/e2e.sh` (UEFI/OVMF boot, no
-  `--karg`, ESP cmdline inspection) are untested. This is the highest remaining
-  risk.
+- **The image has not yet been proven to boot.** `e2e.yml` now runs on pushes
+  to `testing` (plus `merge_group`/manual dispatch), but has not passed yet.
+  The signed-UKI changes to `testsuite/e2e.sh` (UEFI/OVMF boot, no `--karg`,
+  ESP cmdline inspection) still need real hardware/KVM validation. This is the
+  highest remaining risk. E2E is deliberately not a required status check
+  until it is stable.
 - `quality.yml` (reproducibility, golden image diff, BST-native SBOM) has not
   yet gone green.
 - Full remote attestation (reports/ledger, `TPM2_Quote`) is out of scope. The
