@@ -24,9 +24,9 @@ variables:
   crictl-amd64-sha256: "2e141e5b22cb189c40365a11807d69b76b9b3caced89fac2f4ec879408ce2177"
   crictl-arm64-sha256: "519071de89b64c43e2a1661bb5489c6c3fd5e9e5fcef75e50e542b0c891f1118"
 
-  containerd-version: "2.1.9"
-  containerd-amd64-sha256: "0083d2a4c2e77eeb20e55b6d955822fb957ff386c0c23959c8b27f598317586c"
-  containerd-arm64-sha256: "2fbc3053b09812092f6bf316a509d849960eb0cb9332ec88c2f49676d648fd67"
+  containerd-version: "2.4.2"
+  containerd-amd64-sha256: "35880c1dd4627e8ce56526bfabb39c144e83458ffdb197ce6f05d17d94d7d91e"
+  containerd-arm64-sha256: "fdfab81a86192ddb8165d72f116ec985485c9e12505e323c4f4579c48020f276"
 
   runc-version: "1.3.7"
   runc-amd64-sha256: "3c8d24628a006cf52d8791cf8c4586f3a0cb7e29bed8ae4264aca3cb1edb972d"
