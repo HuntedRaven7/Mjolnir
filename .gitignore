@@ -1,6 +1,7 @@
 # BuildStream / build outputs
 /.bst/
 /.build-out/
+/build/
 /dist/
 /*.ociarchive
 /*.tar
