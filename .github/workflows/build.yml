@@ -50,6 +50,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # GHCR requires lowercase repository paths, but github.repository_owner
+      # preserves the account's mixed case (HuntedRaven7). Compute a normalized
+      # owner once for every registry reference; keep the original case for
+      # the OIDC certificate identity, which mirrors the repository name.
+      - name: Normalize registry owner
+        run: echo "IMAGE_OWNER=${OWNER,,}" >> "$GITHUB_ENV"
+        env:
+          OWNER: ${{ github.repository_owner }}
+
       # projectbluefin/actions: runner and artifact-level helpers. The
       # dnf/Containerfile-specific actions are intentionally not used.
       - uses: projectbluefin/actions/bootc-build/setup-runner@v1
@@ -74,7 +83,7 @@ jobs:
       - name: Restore BuildStream cache
         continue-on-error: true
         env:
-          BST_CACHE_REF: ghcr.io/${{ github.repository_owner }}/mjolnir-cache
+          BST_CACHE_REF: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir-cache
           BST_CACHE_KEY: bst-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
@@ -131,7 +140,7 @@ jobs:
           # name ("unknown transport ghcr.io/..."); the explicit prefix avoids
           # that, and resolving the source by immutable ID avoids stale tags.
           IMAGE_ID=$(sudo podman image inspect --format '{{.Id}}' localhost/mjolnir:latest)
-          IMAGE="ghcr.io/${{ github.repository_owner }}/mjolnir"
+          IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir"
           # :testing is the stream tag promoted to :stable on release. :latest
           # stays as a compatibility alias for existing installer defaults.
           sudo podman push --digestfile /tmp/mjolnir-digest.txt \
@@ -156,7 +165,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: projectbluefin/actions/bootc-build/sign-and-publish@v1
         with:
-          image: ghcr.io/${{ github.repository_owner }}/mjolnir
+          image: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir
           digest: ${{ steps.push.outputs.digest }}
           signing-mode: keyless
           # The BST-native SPDX SBOM is produced by the `sbom` job in quality.yml
@@ -183,7 +192,7 @@ jobs:
         if: always()
         continue-on-error: true
         env:
-          BST_CACHE_REF: ghcr.io/${{ github.repository_owner }}/mjolnir-cache
+          BST_CACHE_REF: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir-cache
           BST_CACHE_KEY: bst-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}

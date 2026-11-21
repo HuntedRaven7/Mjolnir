@@ -32,13 +32,20 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      IMAGE: ghcr.io/${{ github.repository_owner }}/mjolnir
     steps:
       - uses: actions/checkout@v4
         with:
           ref: testing
           fetch-depth: 0
+
+      # GHCR needs a lowercase repository path; the OIDC identity keeps the
+      # original mixed case and is read from GITHUB_REPOSITORY_OWNER below.
+      - name: Normalize registry owner
+        run: |
+          echo "IMAGE_OWNER=${OWNER,,}" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${OWNER,,}/mjolnir" >> "$GITHUB_ENV"
+        env:
+          OWNER: ${{ github.repository_owner }}
 
       - name: Install tools
         run: |
