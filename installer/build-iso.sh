@@ -89,6 +89,11 @@ for module in 90dmsquash-live 99img-lib; do
 done
 KVER=$(podman exec "$CID" bash -c 'ls /usr/lib/modules | head -n1')
 [ -n "$KVER" ] || { echo "no kernel version in BASE_IMAGE=$BASE" >&2; exit 1; }
+# The live root needs its own module tree: NVMe, MMC and USB storage are
+# modules, and after switch-root udev must be able to load the driver for the
+# node's actual disk. Without this the installer sees no target disks.
+mkdir -p "$ROOTFS/usr/lib/modules"
+podman cp "$CID:/usr/lib/modules/$KVER" "$ROOTFS/usr/lib/modules/$KVER"
 # --no-hostonly is required: dmsquash-live refuses to run in host-only mode.
 # isofs is needed to read the ISO once the firmware hands over to the kernel.
 podman exec "$CID" bash -c \
