@@ -11,7 +11,9 @@ BUILD="$ROOT/build/iso"
 OUT="$ROOT/dist"
 ARCH="${ARCH:-amd64}"
 IMAGE="${IMAGE:-ghcr.io/huntedraven7/mjolnir:stable}"
-BASE="${BASE_IMAGE:-quay.io/fedora/fedora:43}"
+# The plain fedora container is too minimal: it has no kernel, systemd, podman,
+# skopeo, bootc, ip or nmcli. The bootc image ships all of them; pin by digest.
+BASE="${BASE_IMAGE:-quay.io/fedora/fedora-bootc@sha256:840da31a3e3e8055a8d1c8c0f378e66e5c7de6ebe39037bbf7e5b252f138f04d}"
 EFI_ARCH="$([ "$ARCH" = arm64 ] && echo aa64 || echo x64)"
 BOOT_EFI="$([ "$ARCH" = arm64 ] && echo BOOTAA64.EFI || echo BOOTX64.EFI)"
 
@@ -30,10 +32,16 @@ echo "==> staging live root filesystem from $BASE"
 CID=$(podman create --name mjolnir-iso-root "$BASE" /usr/bin/true 2>/dev/null || \
   podman create "$BASE" /usr/bin/true)
 trap 'podman rm -f "$CID" >/dev/null 2>&1 || true' EXIT
-ROOTFS=$(podman export "$CID" | tar -x -C "$BUILD/squashfs" \
-  usr/bin/systemd usr/bin/podman usr/bin/skopeo usr/bin/bootc \
-  usr/bin/mount usr/bin/umount usr/bin/ip usr/bin/nmcli \
-  usr/lib/systemd 2>/dev/null; echo "$BUILD/squashfs")
+ROOTFS="$BUILD/squashfs"
+# The bootc image hardlinks its /usr files into sysroot/ostree/repo, so a
+# selective `podman export | tar -x` cannot materialise them. podman cp reads
+# through the container filesystem and resolves the hardlinks.
+mkdir -p "$ROOTFS/usr/bin" "$ROOTFS/usr/lib"
+podman cp "$CID:/usr/lib/systemd" "$ROOTFS/usr/lib/systemd"
+for path in usr/bin/podman usr/bin/skopeo usr/bin/bootc \
+            usr/bin/mount usr/bin/umount usr/bin/ip usr/bin/nmcli; do
+  podman cp "$CID:/$path" "$ROOTFS/$path"
+done
 
 cat > "$BUILD/squashfs/etc/mjolnir-installer.json" <<EOF
 {"image":"$IMAGE","filesystem":"btrfs"}
@@ -79,13 +87,17 @@ linux /vmlinuz
 initrd /initrd.img
 options console=tty0 console=ttyS0,115200 rd.systemd.gpt_auto=0 rd.driver.pre=loop root=live:CDLABEL=MJOLNIR_INSTALL
 EOF
-mformat -i "$BUILD/efi.img" -F ::
-mmd -i "$BUILD/efi.img" ::EFI ::EFI/BOOT ::loader ::loader/entries
-mcopy -i "$BUILD/efi.img" "$BUILD/esp/EFI/BOOT/$BOOT_EFI" ::EFI/BOOT/$BOOT_EFI
-mcopy -i "$BUILD/efi.img" "$BUILD/esp/loader/loader.conf" ::loader/loader.conf
-mcopy -i "$BUILD/esp/loader/entries/mjolnir.conf" ::loader/entries/mjolnir.conf
-mcopy -i "$BUILD/esp/vmlinuz" ::vmlinuz
-mcopy -i "$BUILD/esp/initrd.img" ::initrd.img
+# mformat needs an existing image file, and xorriso resolves -e relative to
+# the ISO root, so the FAT image must live inside $BUILD/esp.
+EFI_IMG="$BUILD/esp/efi.img"
+truncate -s 64M "$EFI_IMG"
+mformat -i "$EFI_IMG" -F ::
+mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT ::loader ::loader/entries
+mcopy -i "$EFI_IMG" "$BUILD/esp/EFI/BOOT/$BOOT_EFI" ::EFI/BOOT/$BOOT_EFI
+mcopy -i "$EFI_IMG" "$BUILD/esp/loader/loader.conf" ::loader/loader.conf
+mcopy -i "$EFI_IMG" "$BUILD/esp/loader/entries/mjolnir.conf" ::loader/entries/mjolnir.conf
+mcopy -i "$EFI_IMG" "$BUILD/esp/vmlinuz" ::vmlinuz
+mcopy -i "$EFI_IMG" "$BUILD/esp/initrd.img" ::initrd.img
 
 echo "==> writing ISO"
 ISO="$OUT/mjolnir-installer-${ARCH}.iso"
