@@ -19,7 +19,7 @@ for tool in go podman cpio gzip xz mformat mcopy mmd mksquashfs xorriso; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
 
-mkdir -p "$BUILD"/{initrd,esp/EFI/BOOT,esp/loader/entries,squashfs/bin,squashfs/opt}
+mkdir -p "$BUILD"/{initrd,esp/EFI/BOOT,esp/loader/entries,squashfs/bin,squashfs/opt,squashfs/etc}
 mkdir -p "$OUT"
 
 echo "==> building static installer"
@@ -57,9 +57,16 @@ echo "==> assembling ESP"
 BOOT_SOURCE="${SYSTEMD_BOOT_EFI:-/usr/lib/systemd/boot/efi/systemd-boot${EFI_ARCH}.efi}"
 [ -f "$BOOT_SOURCE" ] || { echo "missing $BOOT_SOURCE" >&2; exit 1; }
 cp "$BOOT_SOURCE" "$BUILD/esp/EFI/BOOT/$BOOT_EFI"
-cp "$BUILD/squashfs/usr/lib/modules"/*/vmlinuz "$BUILD/esp/vmlinuz" 2>/dev/null || \
-  podman cp "$CID:/usr/lib/modules" "$BUILD/modules" && \
-  cp "$(find "$BUILD/modules" -name vmlinuz | head -n1)" "$BUILD/esp/vmlinuz"
+VMLINUZ=""
+if [ -d "$BUILD/squashfs/usr/lib/modules" ]; then
+  VMLINUZ=$(find "$BUILD/squashfs/usr/lib/modules" -name vmlinuz 2>/dev/null | head -n1 || true)
+fi
+if [ -z "$VMLINUZ" ]; then
+  podman cp "$CID:/usr/lib/modules" "$BUILD/modules" >/dev/null 2>&1 || true
+  VMLINUZ=$(find "$BUILD/modules" -name vmlinuz 2>/dev/null | head -n1 || true)
+fi
+[ -n "$VMLINUZ" ] || { echo "no vmlinuz in BASE_IMAGE=$BASE; set BASE_IMAGE to an image with a kernel" >&2; exit 1; }
+cp "$VMLINUZ" "$BUILD/esp/vmlinuz"
 
 cat > "$BUILD/esp/loader/loader.conf" <<'EOF'
 default mjolnir
