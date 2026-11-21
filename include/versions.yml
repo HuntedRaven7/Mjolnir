@@ -20,9 +20,9 @@ variables:
   kubectl-amd64-sha256: "c49a28f1f4efc4d475ed05f47f2ce8e563bf7bef69ed77fe1b924ea6d83b6327"
   kubectl-arm64-sha256: "283f1be6a46b3695b625e25030106b8ffe18bd0d3a900f5b65c259ca407f04f5"
 
-  crictl-version: "1.35.0"
-  crictl-amd64-sha256: "2e141e5b22cb189c40365a11807d69b76b9b3caced89fac2f4ec879408ce2177"
-  crictl-arm64-sha256: "519071de89b64c43e2a1661bb5489c6c3fd5e9e5fcef75e50e542b0c891f1118"
+  crictl-version: "1.37.0"
+  crictl-amd64-sha256: "67c983ee8a6bbce73d39a186e633c5fe4f8a70e62171ac3bd92a9c1b2c601670"
+  crictl-arm64-sha256: "c9dfdf9ebc353a0027c88622206a5e90ee6f0e78cfabf1a9ef4dc575298fd555"
 
   containerd-version: "2.1.9"
   containerd-amd64-sha256: "0083d2a4c2e77eeb20e55b6d955822fb957ff386c0c23959c8b27f598317586c"
