@@ -38,7 +38,7 @@ Requires root (bootc install needs a real root user namespace), QEMU/KVM and
 `cosign`:
 
 ```sh
-IMAGE=ghcr.io/HuntedRaven7/Mjolnir:testing sudo ./testsuite/e2e.sh
+IMAGE=ghcr.io/huntedraven7/mjolnir:testing sudo ./testsuite/e2e.sh
 ```
 
 CI uses the published `:testing` image. See `docs/RELEASING.md` for how a

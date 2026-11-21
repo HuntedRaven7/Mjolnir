@@ -127,7 +127,7 @@ repro:
     ./scripts/repro-check.sh
 
 # Diff the published image against the local build for PR comments.
-image-diff old="ghcr.io/HuntedRaven7/Mjolnir:testing" new="localhost/mjolnir:latest" out="pr-comment.md":
+image-diff old="ghcr.io/huntedraven7/mjolnir:testing" new="localhost/mjolnir:latest" out="pr-comment.md":
     ./scripts/image-diff.sh "{{old}}" "{{new}}" "{{out}}"
 
 # Generate a ready-to-import Console card, auto-detecting the Console origin.

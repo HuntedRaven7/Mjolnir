@@ -38,10 +38,10 @@ pass "synthetic MjolnirNode created"
 echo "==> writing status through the status subresource"
 $KUBECTL patch mjolnirnode mjolnir-plugin-test --subresource=status --type=merge -p '{
   "status": {
-    "image": "ghcr.io/HuntedRaven7/Mjolnir:test",
+    "image": "ghcr.io/huntedraven7/mjolnir:test",
     "version": "26.11.1",
     "updateAvailable": true,
-    "pendingDeployment": "ghcr.io/HuntedRaven7/Mjolnir:next",
+    "pendingDeployment": "ghcr.io/huntedraven7/mjolnir:next",
     "rebootRequired": false,
     "rebootLock": false,
     "rebootDeferred": false,

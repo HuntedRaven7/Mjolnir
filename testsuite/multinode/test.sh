@@ -93,7 +93,7 @@ kubectl --kubeconfig "$ITS_KC" patch mjolnirnode mjolnir-worker-1 \
     "status": {
       "version": "26.11.2",
       "updateAvailable": true,
-      "image": "ghcr.io/HuntedRaven7/Mjolnir:next",
+      "image": "ghcr.io/huntedraven7/mjolnir:next",
       "attestation": {"method": "tpm2", "bootId": "multi-node-boot-1"},
       "wifi": {"ssid": "fleet-net", "interface": "wlan0", "state": "UP"}
     }
