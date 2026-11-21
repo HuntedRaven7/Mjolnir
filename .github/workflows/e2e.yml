@@ -2,9 +2,12 @@ name: e2e
 
 # Boot/health/provenance gate, adapted from projectbluefin/testsuite's wrapper
 # pattern. Drives our shell-less image over the serial console + Varlink instead
-# of injecting an SSH user into a disposable disk copy. Written as a merge-queue
-# gate, but merge queue is not enabled yet and this workflow has never run.
+# of injecting an SSH user into a disposable disk copy. Also runs on pushes to
+# testing so the signed-UKI boot path is actually exercised; it is intentionally
+# NOT a required status check until it has passed reliably.
 on:
+  push:
+    branches: [testing]
   merge_group:
   workflow_dispatch:
     inputs:
