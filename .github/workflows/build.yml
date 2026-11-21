@@ -18,7 +18,7 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: taiki-e/install-action@v2
         with:
           tool: just
@@ -48,7 +48,7 @@ jobs:
       attestations: write
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # GHCR requires lowercase repository paths, but github.repository_owner
       # preserves the account's mixed case (HuntedRaven7). Compute a normalized
