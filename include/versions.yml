@@ -7,6 +7,10 @@ variables:
   # -------------------------------------------------------------------------
   fsdk-ref: "freedesktop-sdk-26.08.4-0-g114ae909ec9881958bd507c8b4414aa33f758d2b"
 
+  # Installer ISO host tooling (not part of the bootc image). The dracut live
+  # modules in installer/dracut-modules were extracted from this pinned RPM.
+  dracut-live-rpm-sha256: "df1407afb9161b14f8e526c4a386f9061067f4f5f63bb05e578281ca9280d997"
+
   # -------------------------------------------------------------------------
   # Kubernetes (upstream kubeadm; no k0s)
   # -------------------------------------------------------------------------
