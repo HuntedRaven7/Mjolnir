@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@v2
@@ -33,7 +33,7 @@ jobs:
 
   image:
     needs: validate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 240
     # Keep every Podman invocation in the same (root) store. `just` forwards
     # PODMAN to export, lint and the Python content checks; the push step below
