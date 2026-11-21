@@ -53,8 +53,20 @@ echo "==> booting VM via UEFI/systemd-boot (serial console: $SERIAL)"
 # Boot through the firmware so systemd-boot loads the signed UKI from the ESP.
 # A direct -kernel/-initrd boot would bypass the signed UKI and its pinned
 # composefs digest, which is exactly what this E2E must exercise.
-OVMF=$(find /usr/share/OVMF -name 'OVMF_CODE.fd' 2>/dev/null | head -n1)
-[ -n "$OVMF" ] || fail "OVMF_CODE.fd not found (UEFI firmware required for the sealed UKI)"
+# Ubuntu 26.04 (resolute) ships only 4M firmware (OVMF_CODE_4M.fd); older
+# releases ship OVMF_CODE.fd. Accept either layout so the runner can boot the
+# signed UKI through systemd-boot regardless of the OVMF package version.
+OVMF=""
+for name in OVMF_CODE_4M.fd OVMF_CODE.fd; do
+  if [ -f "/usr/share/OVMF/$name" ]; then
+    OVMF="/usr/share/OVMF/$name"
+    break
+  fi
+done
+if [ -z "$OVMF" ]; then
+  OVMF=$(find /usr/share/OVMF -maxdepth 1 -name 'OVMF_CODE*.fd' 2>/dev/null | sort | head -n1)
+fi
+[ -n "$OVMF" ] || fail "OVMF_CODE*.fd not found (UEFI firmware required for the sealed UKI)"
 qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cpu host \
   -drive "if=pflash,format=raw,readonly=on,file=$OVMF" \
   -drive file="$DISK",format=raw,if=virtio \
