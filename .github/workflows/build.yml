@@ -128,6 +128,24 @@ jobs:
       # The pushed :testing image is the candidate for the manual :stable
       # promotion in execute-release.yml. The E2E job in e2e.yml is written to
       # test it as well, but merge queue is not enabled yet.
+      # Compare the newly built image with the previously published :testing
+      # image. Runs only on pushes to testing (not PRs) and before the push, so
+      # the previous :testing digest is still the baseline.
+      - name: Golden image diff
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io \
+            -u "${{ github.actor }}" --password-stdin
+          just image-diff new=localhost/mjolnir:latest out=image-diff.md
+
+      - name: Upload image diff
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mjolnir-image-diff
+          path: image-diff.md
+          retention-days: 90
+
       - name: Push image
         if: github.event_name != 'pull_request'
         id: push

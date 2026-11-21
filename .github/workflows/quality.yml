@@ -9,44 +9,10 @@ on:
 
 permissions: {}
 
-jobs:
-  image-diff:
-    name: Golden image diff
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      packages: read
-      pull-requests: write
-    env:
-      PODMAN: "sudo podman"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
-      - name: Build image
-        run: just build
-      - name: Generate diff
-        run: just image-diff new=localhost/mjolnir:latest out=pr-comment.md
-      - name: Post comment
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- mjolnir-image-diff -->';
-            const text = marker + '\n' + fs.readFileSync('pr-comment.md', 'utf8');
-            const { data: comments } = await github.rest.issues.listComments({
-              issue_number: context.issue.number, owner: context.repo.owner, repo: context.repo.repo,
-            });
-            const existing = comments.find(c => c.body?.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ comment_id: existing.id, body: text, owner: context.repo.owner, repo: context.repo.repo });
-            } else {
-              await github.rest.issues.createComment({ issue_number: context.issue.number, body: text, owner: context.repo.owner, repo: context.repo.repo });
-            }
+# The golden image diff now runs as part of build.yml on pushes to testing,
+# against the previously published :testing image. It no longer runs on PRs.
 
+jobs:
   reproducibility:
     name: Reproducibility
     if: github.event_name != 'pull_request'

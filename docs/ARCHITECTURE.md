@@ -187,8 +187,9 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
   run; the signed-UKI changes to `testsuite/e2e.sh` (UEFI/OVMF boot, no
   `--karg`, ESP cmdline inspection) are untested. This is the highest remaining
   risk.
-- `quality.yml` (reproducibility, golden image diff, BST-native SBOM) has not
-  yet gone green.
+- `quality.yml` (reproducibility, BST-native SBOM) has not yet gone green. The
+  golden image diff now runs in `build.yml` on pushes to `testing` instead of
+  on PRs.
 - Full remote attestation (reports/ledger, `TPM2_Quote`) is out of scope. The
   signed UKI gives a stable PCR 11 measurement and the composefs digest is
   pinned inside the signed `.cmdline`; `mjolnir-fleet status` reports both as
