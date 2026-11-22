@@ -27,6 +27,8 @@ commands, so a separate workflow handles that (see below).
   its sha256 for both amd64 and arm64.
 - Resolves the FSDK, bootc and BuildStream-plugins git refs via `git ls-remote`
   and emits BuildStream's `<tag>-0-g<sha>` form.
+- Updates the `buildstream-plugins-community` PyPI sdist: bumps the version in
+  the element URL and recomputes its sha256 ref from PyPI.
 - By default only same-major (patch/minor) git ref bumps are applied. Pass
   `--allow-major` to opt into a major bump.
 - `--check` exits 1 when pins would change (useful in CI).
@@ -56,6 +58,14 @@ demand with `allow_major`. It runs `scripts/update_pins.py` and opens/updates a
 PR via `peter-evans/create-pull-request`. The normal image CI then rebuilds and
 validates the PR. Patch/minor updates auto-merge once CI is green; majors need
 manual review.
+
+**Repository requirement:** the default `GITHUB_TOKEN` may only create PRs when
+*Settings → Actions → General → Workflow permissions → Allow GitHub Actions to
+create and approve pull requests* is enabled. Without it the workflow pushes
+`automation/update-elements` but fails at PR creation with "GitHub Actions is
+not permitted to create or approve pull requests". There is no REST/GraphQL
+setting for this checkbox; it must be enabled in the UI (or a PAT supplied via
+a repository secret and passed to the action).
 
 ## Important caveat
 

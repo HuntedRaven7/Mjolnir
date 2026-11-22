@@ -36,7 +36,10 @@ jobs:
       - name: Open or update pull request
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Falls back to GITHUB_TOKEN, which requires "Allow GitHub Actions
+          # to create and approve pull requests" in the repo settings. A PAT
+          # with repo scope can be supplied as ELEMENT_UPDATE_TOKEN instead.
+          token: ${{ secrets.ELEMENT_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
           branch: automation/update-elements
           delete-branch: true
           title: "chore: update pinned element sources"

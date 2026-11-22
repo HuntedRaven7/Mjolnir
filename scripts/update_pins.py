@@ -11,7 +11,7 @@ Sources handled:
   - cri-tools, containerd, runc, CNI plugins from GitHub release assets
   - FSDK junction ref (git describe of the pinned release branch)
   - bootc git ref
-  - BuildStream plugin refs
+  - BuildStream plugin refs (git and PyPI sdist)
 
 Usage:
   python3 scripts/update_pins.py [--check]   # --check exits 1 if anything would change
@@ -34,6 +34,7 @@ VERSIONS = ROOT / "include/versions.yml"
 FSDK_ELEMENT = ROOT / "elements/freedesktop-sdk.bst"
 BOOTC_ELEMENT = ROOT / "elements/mgmt/bootc.bst"
 PLUGIN_ELEMENT = ROOT / "elements/plugins/buildstream-plugins.bst"
+COMMUNITY_PLUGIN_ELEMENT = ROOT / "elements/plugins/buildstream-plugins-community.bst"
 
 TIMEOUT = 120
 
@@ -101,6 +102,32 @@ def git_describe(repo: str, tag_pattern: str, current: str = "", allow_major: bo
             raise RuntimeError(f"no same-major tags matching {tag_pattern} in {repo}")
     tag, sha = max(tags, key=key)
     return f"{tag}-0-g{sha}"
+
+
+def version_tuple(v: str) -> tuple[int, ...]:
+    return tuple(int(n) for n in re.findall(r"\d+", v)[:3])
+
+
+def pypi_sdist(package: str, current: str, allow_major: bool) -> tuple[str, str]:
+    """Return (version, sdist URL) for the newest same-major PyPI release."""
+    req = urllib.request.Request(
+        f"https://pypi.org/pypi/{package}/json",
+        headers={"User-Agent": "mjolnir-update-pins/1.0"},
+    )
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        data = json.load(resp)
+    releases = data.get("releases", {})
+    versions = [v for v in releases if re.fullmatch(r"\d+(?:\.\d+)+", v)]
+    if current and not allow_major:
+        major = version_tuple(current)[0]
+        versions = [v for v in versions if version_tuple(v)[0] == major]
+    if not versions:
+        raise RuntimeError(f"no suitable versions for {package}")
+    latest = max(versions, key=version_tuple)
+    sdists = [f for f in releases[latest] if f.get("packagetype") == "sdist"]
+    if not sdists:
+        raise RuntimeError(f"no sdist for {package} {latest}")
+    return latest, sdists[0]["url"]
 
 
 BINARY_SOURCES = [
@@ -234,6 +261,33 @@ def main() -> int:
                     )
         except Exception as exc:
             print(f"warning: {element.name} ref lookup failed: {exc}", file=sys.stderr)
+
+    # PyPI sdist plugin: the version is in the tarball URL and the ref is its
+    # sha256. Keep both in sync so Renovate never has to touch a raw hash.
+    try:
+        text = COMMUNITY_PLUGIN_ELEMENT.read_text()
+        current = re.search(
+            r"buildstream_plugins_community-([0-9.]+)\.tar\.gz", text
+        ).group(1)
+        version, url = pypi_sdist(
+            "buildstream-plugins-community", current, args.allow_major
+        )
+        if version != current:
+            sha = download_sha256(url)
+            filename = f"buildstream_plugins_community-{version}.tar.gz"
+            updated = re.sub(
+                r"buildstream_plugins_community-[0-9.]+\.tar\.gz", filename, text
+            )
+            updated = re.sub(
+                r"^  ref: \S+$", f"  ref: {sha}", updated, count=1, flags=re.MULTILINE
+            )
+            changes.append(
+                f"{COMMUNITY_PLUGIN_ELEMENT.name}: {current} -> {version} ({sha})"
+            )
+            if not args.check:
+                COMMUNITY_PLUGIN_ELEMENT.write_text(updated)
+    except Exception as exc:
+        print(f"warning: {COMMUNITY_PLUGIN_ELEMENT.name} lookup failed: {exc}", file=sys.stderr)
 
     return write_results(versions, new_versions, changes, args)
 
