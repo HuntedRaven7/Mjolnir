@@ -124,7 +124,7 @@ type diskInfo struct {
 	Model      string `json:"model"`
 	Serial     string `json:"serial"`
 	Tran       string `json:"tran"`
-	Rm         string `json:"rm"`
+	Rm         bool   `json:"rm"`
 	Mountpoint string `json:"mountpoint"`
 }
 
@@ -155,7 +155,7 @@ func disks(r runner) ([]diskInfo, error) {
 	}
 	var result []diskInfo
 	for _, d := range payload.BlockDevices {
-		if d.Type != "disk" || d.Rm == "1" || d.Mountpoint != "" || bootPaths[d.Path] {
+		if d.Type != "disk" || d.Rm || d.Mountpoint != "" || bootPaths[d.Path] {
 			continue
 		}
 		result = append(result, d)
