@@ -362,7 +362,7 @@ func install(c *config, disk string, r runner) error {
 	// the host (not inside the container) so host udev can see the partitions.
 	target := disk
 	if !c.DryRun {
-		loop, err := r.output("losetup", "--find", "--show", disk)
+		loop, err := r.output("losetup", "--find", "--show", "--partscan", disk)
 		if err != nil {
 			return fmt.Errorf("attach loop device for %s: %w", disk, err)
 		}
