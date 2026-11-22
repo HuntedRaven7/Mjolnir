@@ -48,9 +48,14 @@ mkdir -p "$ROOTFS"
 podman export "$CID" | tar -x -C "$ROOTFS"
 # The ostree object store is only needed to resolve those hardlinks.
 rm -rf "$ROOTFS/sysroot"
-# Documentation and locales are not needed in an installer.
+# Documentation, locales and development data are not needed in an installer.
+# Keep /usr/lib/firmware: the live image still has to drive real hardware.
 rm -rf "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/man" \
-  "$ROOTFS/usr/share/locale" "$ROOTFS/usr/share/help" "$ROOTFS/var/cache"
+  "$ROOTFS/usr/share/locale" "$ROOTFS/usr/share/help" \
+  "$ROOTFS/usr/share/icons" "$ROOTFS/usr/share/backgrounds" \
+  "$ROOTFS/usr/share/sounds" "$ROOTFS/usr/lib/debug" \
+  "$ROOTFS/usr/src" "$ROOTFS/usr/include" "$ROOTFS/var/cache" \
+  "$ROOTFS/var/lib/dnf"
 
 # The base image enables sshd; it has no place in the installer live root.
 find "$ROOTFS/usr/lib/systemd/system" -name 'sshd*' -delete
@@ -108,7 +113,9 @@ EOF
 # the ISO root, so the FAT image must live inside $BUILD/esp. It has to hold
 # both the kernel and the dracut initramfs.
 EFI_IMG="$BUILD/esp/efi.img"
-truncate -s 256M "$EFI_IMG"
+# 192M holds the kernel + dracut initramfs (~125M) with headroom, without
+# wasting another 64M in every ISO.
+truncate -s 192M "$EFI_IMG"
 mformat -i "$EFI_IMG" -F ::
 mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT ::loader ::loader/entries
 mcopy -i "$EFI_IMG" "$BUILD/esp/EFI/BOOT/$BOOT_EFI" ::EFI/BOOT/$BOOT_EFI
