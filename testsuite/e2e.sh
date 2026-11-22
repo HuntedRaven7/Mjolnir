@@ -43,7 +43,7 @@ truncate -s 20G "$DISK"
 # the via-loopback install sees parttype=null and rejects the root partition.
 podman run --rm --privileged --pid=host \
   -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
-  -v /run/udev:/run/udev \
+  --tmpfs /run/udev \
   -v "$BUILD:/mnt/e2e" \
   --security-opt label=type:unconfined_t \
   "$IMAGE" bootc install to-disk --composefs-backend --via-loopback /mnt/e2e/disk.raw \

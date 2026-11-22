@@ -93,7 +93,7 @@ disk size="32G":
       fallocate -l {{size}} build/bootable.raw
     fi
     {{podman}} run --rm --privileged --pid=host \
-      -v /dev:/dev -v /run/udev:/run/udev \
+      -v /dev:/dev --tmpfs /run/udev \
       -v /var/lib/containers:/var/lib/containers \
       -v "{{justfile_directory()}}:/data" \
       \
