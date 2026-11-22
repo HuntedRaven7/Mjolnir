@@ -5,9 +5,5 @@ run-repart = true
 
 [install.filesystem.root]
 type = "btrfs"
-
-[install.filesystem.esp]
-type = "vfat"
-
-[install.filesystem.xbootldr]
-type = "vfat"
+# ESP and xbootldr filesystems are set by bootc itself. Declaring them here
+# makes bootc install fail with "unknown field `esp`, expected `root`".
