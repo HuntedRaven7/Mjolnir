@@ -101,6 +101,11 @@ UKI=$(find "$BUILD/image-efi" -name '*.efi' 2>/dev/null | head -n1 || true)
 [ -n "$UKI" ] || fail "no UKI staged from image"
 install -Dm644 "$UKI" "$ROOTFS/boot/efi/EFI/Linux/$(basename "$UKI")"
 
+echo "==> installed root diagnostics"
+find "$ROOTFS" -name systemd -type f 2>/dev/null | head -5 || true
+find "$ROOTFS" -maxdepth 4 -type d -name deploy 2>/dev/null | head -5 || true
+find "$ROOTFS/boot" -name '*.efi' 2>/dev/null | head -10 || true
+
 umount "$ROOTFS/boot/efi" "$ROOTFS" || true
 losetup -d "$LOOP"
 LOOP=""
