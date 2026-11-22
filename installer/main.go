@@ -14,7 +14,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -33,10 +35,12 @@ type config struct {
 	DryRun     bool   `json:"dryRun"`
 	Reboot     bool   `json:"reboot"`
 	Filesystem string `json:"filesystem"`
+	Yes        bool   `json:"-"`
 }
 
 type runner interface {
 	run(name string, args ...string) error
+	runStdin(input string, name string, args ...string) error
 	output(name string, args ...string) (string, error)
 }
 
@@ -45,6 +49,14 @@ type realRunner struct{}
 func (realRunner) run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (realRunner) runStdin(input string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = strings.NewReader(input)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -59,6 +71,10 @@ type dryRunner struct{ real runner }
 
 func (d dryRunner) run(name string, args ...string) error {
 	fmt.Printf("[dry-run] %s %s\n", name, strings.Join(args, " "))
+	return nil
+}
+func (d dryRunner) runStdin(input string, name string, args ...string) error {
+	fmt.Printf("[dry-run] %s %s (stdin from credential)\n", name, strings.Join(args, " "))
 	return nil
 }
 func (d dryRunner) output(name string, args ...string) (string, error) {
@@ -101,48 +117,150 @@ func loadConfig(path string) (*config, error) {
 	return &c, nil
 }
 
-func disks(r runner) ([]string, error) {
-	out, err := r.output("lsblk", "-dn", "-o", "PATH,SIZE,TYPE")
+type diskInfo struct {
+	Path       string `json:"path"`
+	Size       string `json:"size"`
+	Type       string `json:"type"`
+	Model      string `json:"model"`
+	Serial     string `json:"serial"`
+	Tran       string `json:"tran"`
+	Rm         string `json:"rm"`
+	Mountpoint string `json:"mountpoint"`
+}
+
+func disks(r runner) ([]diskInfo, error) {
+	out, err := r.output("lsblk", "-J", "-d", "-o", "PATH,SIZE,TYPE,MODEL,SERIAL,TRAN,RM,MOUNTPOINT")
 	if err != nil {
 		return nil, err
 	}
-	var result []string
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 3 && fields[2] == "disk" {
-			result = append(result, fields[0]+" ("+fields[1]+")")
+	if strings.TrimSpace(out) == "" {
+		return nil, nil // dry-run has no block devices
+	}
+	var payload struct {
+		BlockDevices []diskInfo `json:"blockdevices"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		return nil, fmt.Errorf("parse lsblk output: %w", err)
+	}
+
+	// Never offer a disk the kernel booted from, a removable stick (usually
+	// the installer media) or a disk that is currently mounted.
+	bootPaths := map[string]bool{}
+	if cmdline, err := os.ReadFile("/proc/cmdline"); err == nil {
+		for _, field := range strings.Fields(string(cmdline)) {
+			if strings.HasPrefix(field, "/dev/") {
+				bootPaths[field] = true
+			}
 		}
 	}
+	var result []diskInfo
+	for _, d := range payload.BlockDevices {
+		if d.Type != "disk" || d.Rm == "1" || d.Mountpoint != "" || bootPaths[d.Path] {
+			continue
+		}
+		result = append(result, d)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Path < result[j].Path })
 	return result, nil
 }
 
-func chooseDisk(in *bufio.Reader, r runner, def string) (string, error) {
+var sizeRe = regexp.MustCompile(`^([0-9]+(?:\.[0-9]+)?)([KMGTPE])$`)
+
+func diskSizeBytes(size string) (float64, bool) {
+	m := sizeRe.FindStringSubmatch(strings.TrimSpace(size))
+	if m == nil {
+		return 0, false
+	}
+	n, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return 0, false
+	}
+	units := map[string]float64{"K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12, "P": 1e15, "E": 1e18}
+	return n * units[strings.ToUpper(m[2])], true
+}
+
+const minDiskBytes = 20e9
+
+func describeDisk(d diskInfo) string {
+	parts := []string{d.Path, d.Size}
+	if d.Model != "" {
+		parts = append(parts, d.Model)
+	}
+	if d.Serial != "" {
+		parts = append(parts, "serial="+d.Serial)
+	}
+	if d.Tran != "" {
+		parts = append(parts, d.Tran)
+	}
+	return strings.Join(parts, " ")
+}
+
+func checkDiskSize(d diskInfo) error {
+	n, ok := diskSizeBytes(d.Size)
+	if ok && n < minDiskBytes {
+		return fmt.Errorf("%s is %s, smaller than the required 20 GB", d.Path, d.Size)
+	}
+	return nil
+}
+
+func chooseDisk(in *bufio.Reader, r runner, def string, yes, dry bool) (string, error) {
 	list, err := disks(r)
 	if err != nil {
 		return "", err
 	}
 	if len(list) == 0 {
-		return "", errors.New("no block devices found")
+		if dry {
+			if def != "" {
+				return def, nil
+			}
+			return "/dev/vda", nil
+		}
+		return "", errors.New("no eligible disks: removable, mounted and boot disks are excluded")
 	}
-	sort.Strings(list)
 	fmt.Println("Available disks:")
 	for i, d := range list {
-		fmt.Printf("  %d) %s\n", i+1, d)
+		fmt.Printf("  %d) %s\n", i+1, describeDisk(d))
 	}
+
+	if yes {
+		if def == "" {
+			selected := list[0]
+			fmt.Printf("Unattended install: using %s\n", describeDisk(selected))
+			return selected.Path, checkDiskSize(selected)
+		}
+		for _, d := range list {
+			if d.Path == def {
+				return def, checkDiskSize(d)
+			}
+		}
+		return "", fmt.Errorf("configured disk %q is not an eligible disk", def)
+	}
+
 	choice := prompt(in, "Select disk number", "1")
 	var idx int
 	if _, err := fmt.Sscanf(choice, "%d", &idx); err != nil || idx < 1 || idx > len(list) {
 		return "", fmt.Errorf("invalid selection %q", choice)
 	}
-	if def != "" && def != list[idx-1] {
-		fmt.Printf("warning: config disk %q differs from selection %q\n", def, list[idx-1])
+	selected := list[idx-1]
+	if def != "" && def != selected.Path {
+		fmt.Printf("warning: config disk %q differs from selection %q\n", def, selected.Path)
 	}
-	return strings.Fields(list[idx-1])[0], nil
+	if err := checkDiskSize(selected); err != nil {
+		return "", err
+	}
+	fmt.Printf("WARNING: %s will be completely erased.\n", selected.Path)
+	if confirm := prompt(in, "Type the disk path to confirm", ""); confirm != selected.Path {
+		return "", errors.New("disk confirmation did not match; nothing was changed")
+	}
+	return selected.Path, nil
 }
 
 func wifiConnect(r runner, ssid, psk string, dry bool) error {
 	if ssid == "" || psk == "" {
 		return nil
+	}
+	if len(psk) != 64 || !regexp.MustCompile(`^[0-9a-fA-F]{64}$`).MatchString(psk) {
+		return errors.New("wifi-psk must be a 64 character hex string")
 	}
 	if dry {
 		fmt.Printf("[dry-run] write WiFi keyfile for %s and nmcli up\n", ssid)
@@ -167,11 +285,32 @@ func wifiConnect(r runner, ssid, psk string, dry bool) error {
 	return nil
 }
 
+// readCredential reads a systemd credential supplied by the provisioning
+// system. Unit credentials take precedence over system credentials.
+func readCredential(name string) string {
+	var paths []string
+	if dir := os.Getenv("CREDENTIALS_DIRECTORY"); dir != "" {
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	paths = append(paths,
+		filepath.Join("/run/credentials/mjolnir-installer.service", name),
+		filepath.Join("/run/credentials/@system", name),
+	)
+	for _, path := range paths {
+		if b, err := os.ReadFile(path); err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	return ""
+}
+
 func registryLogin(r runner, user, token string) error {
 	if user == "" || token == "" {
 		return nil
 	}
-	return r.run("podman", "login", "ghcr.io", "-u", user, "--password-stdin")
+	// --password-stdin needs the token on the child's stdin; passing it as an
+	// argv would leak it in the process table.
+	return r.runStdin(token+"\n", "podman", "login", "ghcr.io", "-u", user, "--password-stdin")
 }
 
 func newMachineID() string {
@@ -240,24 +379,102 @@ func install(c *config, disk string, r runner) error {
 	return nil
 }
 
+type lsblkDevice struct {
+	Path       string        `json:"path"`
+	Type       string        `json:"type"`
+	Fstype     string        `json:"fstype"`
+	Mountpoint string        `json:"mountpoint"`
+	Children   []lsblkDevice `json:"children"`
+}
+
+// verifyInstall checks the installed disk before declaring success: an ESP
+// with systemd-boot and a signed UKI, plus a btrfs root partition.
+func verifyInstall(r runner, disk string) error {
+	out, err := r.output("lsblk", "-J", "-o", "PATH,TYPE,FSTYPE,MOUNTPOINT", disk)
+	if err != nil {
+		return err
+	}
+	var payload struct {
+		BlockDevices []lsblkDevice `json:"blockdevices"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		return fmt.Errorf("parse lsblk output: %w", err)
+	}
+	if len(payload.BlockDevices) == 0 {
+		return errors.New("target disk disappeared after install")
+	}
+	var esp, root string
+	for _, child := range payload.BlockDevices[0].Children {
+		if child.Type != "part" {
+			continue
+		}
+		if child.Fstype == "vfat" && esp == "" {
+			esp = child.Path
+		}
+		if child.Fstype == "btrfs" && root == "" {
+			root = child.Path
+		}
+	}
+	if esp == "" || root == "" {
+		return fmt.Errorf("installed disk has no ESP (%q) or btrfs root (%q)", esp, root)
+	}
+
+	mnt, err := os.MkdirTemp("", "mjolnir-esp-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(mnt)
+	if err := r.run("mount", "-o", "ro", esp, mnt); err != nil {
+		return fmt.Errorf("mount ESP %s: %w", esp, err)
+	}
+	defer r.run("umount", mnt)
+
+	uki, err := filepath.Glob(filepath.Join(mnt, "EFI", "Linux", "*.efi"))
+	if err != nil || len(uki) == 0 {
+		return errors.New("no signed UKI found in ESP/EFI/Linux")
+	}
+	loaders, err := filepath.Glob(filepath.Join(mnt, "EFI", "BOOT", "BOOT*.EFI"))
+	if err != nil || len(loaders) == 0 {
+		return errors.New("no systemd-boot loader found in ESP/EFI/BOOT")
+	}
+	fmt.Printf("Verified %s: ESP %s (%s), root %s\n", disk, esp, filepath.Base(uki[0]), root)
+	return nil
+}
+
 func run(c *config, r runner) error {
+	// Provisioning credentials take precedence over an empty config field, so
+	// secrets never have to be baked into the ISO or its JSON config.
+	if c.RegUser == "" {
+		c.RegUser = readCredential("registry-user")
+	}
+	if c.RegToken == "" {
+		c.RegToken = readCredential("registry-token")
+	}
+	if c.SSID == "" {
+		c.SSID = readCredential("wifi-ssid")
+	}
+	if c.PSK == "" {
+		c.PSK = readCredential("wifi-psk")
+	}
+
 	if err := wifiConnect(r, c.SSID, c.PSK, c.DryRun); err != nil {
 		return fmt.Errorf("wifi: %w", err)
 	}
 	if err := registryLogin(r, c.RegUser, c.RegToken); err != nil {
 		return fmt.Errorf("registry login: %w", err)
 	}
-	disk := c.Disk
-	if disk == "" {
-		in := bufio.NewReader(os.Stdin)
-		var err error
-		disk, err = chooseDisk(in, r, "")
-		if err != nil {
-			return err
-		}
+	in := bufio.NewReader(os.Stdin)
+	disk, err := chooseDisk(in, r, c.Disk, c.Yes, c.DryRun)
+	if err != nil {
+		return err
 	}
 	if err := install(c, disk, r); err != nil {
 		return err
+	}
+	if c.DryRun {
+		fmt.Printf("[dry-run] verify installed disk %s\n", disk)
+	} else if err := verifyInstall(r, disk); err != nil {
+		return fmt.Errorf("post-install verification: %w", err)
 	}
 	if c.Hostname != "" {
 		fmt.Printf("Provision hostname %q and role %q on first boot via systemd credentials.\n", c.Hostname, c.Role)
@@ -271,6 +488,7 @@ func run(c *config, r runner) error {
 func main() {
 	configPath := flag.String("config", "", "JSON config file (skips interactive prompts for values it sets)")
 	dryRun := flag.Bool("dry-run", false, "print commands without executing them")
+	yes := flag.Bool("yes", false, "unattended: no prompts, pick the first eligible disk if none is configured")
 	version := flag.Bool("version", false, "print version")
 	flag.Parse()
 
@@ -287,6 +505,7 @@ func main() {
 	if *dryRun {
 		c.DryRun = true
 	}
+	c.Yes = *yes
 
 	var r runner = realRunner{}
 	if c.DryRun {
@@ -294,23 +513,29 @@ func main() {
 	}
 
 	in := bufio.NewReader(os.Stdin)
-	if c.Image == "" || *configPath == "" {
-		c.Image = prompt(in, "Image reference", c.Image)
-	}
-	if c.SSID == "" && *configPath == "" {
-		if strings.EqualFold(prompt(in, "Configure WiFi?", "n"), "y") {
-			c.SSID = prompt(in, "WiFi SSID", "")
-			c.PSK = prompt(in, "WPA PSK (64 hex chars)", "")
+	if c.Yes {
+		if c.Disk == "" {
+			fmt.Println("Unattended install: no disk configured; the first eligible disk will be used")
 		}
-	}
-	if c.RegUser == "" && *configPath == "" {
-		if strings.EqualFold(prompt(in, "Private registry?", "n"), "y") {
-			c.RegUser = prompt(in, "Registry user", "")
-			c.RegToken = prompt(in, "Registry token", "")
+	} else {
+		if c.Image == "" || *configPath == "" {
+			c.Image = prompt(in, "Image reference", c.Image)
 		}
-	}
-	if c.Role == "" && *configPath == "" {
-		c.Role = prompt(in, "Node role (control-plane/worker)", "worker")
+		if c.SSID == "" && *configPath == "" {
+			if strings.EqualFold(prompt(in, "Configure WiFi?", "n"), "y") {
+				c.SSID = prompt(in, "WiFi SSID", "")
+				c.PSK = prompt(in, "WPA PSK (64 hex chars)", "")
+			}
+		}
+		if c.RegUser == "" && *configPath == "" {
+			if strings.EqualFold(prompt(in, "Private registry?", "n"), "y") {
+				c.RegUser = prompt(in, "Registry user", "")
+				c.RegToken = prompt(in, "Registry token", "")
+			}
+		}
+		if c.Role == "" && *configPath == "" {
+			c.Role = prompt(in, "Node role (control-plane/worker)", "worker")
+		}
 	}
 
 	if err := run(c, r); err != nil {

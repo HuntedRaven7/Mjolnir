@@ -21,8 +21,8 @@ Output: `dist/mjolnir-installer-amd64.iso` (set `ARCH=arm64` for aarch64).
 
 ## Interactive use
 
-Boot the ISO. `mjolnir-installer.service` starts the installer on `/dev/console`.
-It prompts for:
+Boot the ISO. `mjolnir-installer.service` starts the installer and logs to both
+the journal and the console. It prompts for:
 
 - image reference (default `ghcr.io/huntedraven7/mjolnir:stable`)
 - WiFi SSID and WPA PSK (optional; writes a NetworkManager keyfile)
@@ -30,7 +30,12 @@ It prompts for:
 - node role (`control-plane` or `worker`)
 - target disk (selected from `lsblk`)
 
-It then wipes the disk, pulls the image and runs `bootc install to-disk`.
+Removable media, mounted disks and the disk named on the kernel command line
+are never offered. The interactive flow requires you to **type the exact disk
+path** before anything is erased, and disks smaller than 20 GB are rejected.
+
+After the install it verifies that the target has a vfat ESP containing
+systemd-boot and a signed UKI, plus a btrfs root, before reporting success.
 Wired networking and DHCP are handled by NetworkManager in the live image.
 
 ## Headless use
@@ -51,8 +56,11 @@ Pass `--config <file>` to skip prompts for values set in the JSON:
 }
 ```
 
-`--dry-run` prints the commands without executing them; `--version` prints the
-installer version.
+`--yes` disables all prompts and selects the configured disk — or the first
+eligible disk if none is configured. The service in the ISO uses this flag
+because it has no tty; an interactive terminal should omit it to get the disk
+confirmation prompt. `--dry-run` prints the commands without executing them;
+`--version` prints the installer version.
 
 ## Provisioning the installed node
 
@@ -63,8 +71,13 @@ credentials on first boot (see `docs/PROVISIONING.md`). The `hostname` and
 
 ## Security notes
 
-- Registry tokens are read from the config and piped to `podman login`; they
-  are never written to disk by the installer.
+- Registry tokens are piped to `podman login` via stdin, never passed as an
+  argument or written to disk by the installer.
+- Prefer **systemd credentials** over config values for secrets. Put
+  `registry-user`, `registry-token`, `wifi-ssid` and `wifi-psk` in
+  `$CREDENTIALS_DIRECTORY`, `/run/credentials/mjolnir-installer.service/` or
+  `/run/credentials/@system/`; the installer reads them and only falls back to
+  the JSON config. `wifi-psk` must be exactly 64 hex characters.
 - All external commands are executed as argv via `runner`; there is no
   `sh -c` and no shell in the target image.
 - The ISO is UEFI-only (systemd-boot + BLS entries).

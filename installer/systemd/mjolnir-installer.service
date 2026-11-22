@@ -8,7 +8,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/opt/mjolnir-install --config /etc/mjolnir-installer.json
+ExecStart=/opt/mjolnir-install --yes --config /etc/mjolnir-installer.json
 # Do not pin stdin/stdout to /dev/console. Headless VMs and machines where
 # /dev/console is not the console being watched made the installer impossible
 # to see or drive. Log to the journal AND every console; with no tty on stdin
