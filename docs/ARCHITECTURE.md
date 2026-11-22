@@ -193,8 +193,10 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
 - Full remote attestation (reports/ledger, `TPM2_Quote`) is out of scope. The
   signed UKI gives a stable PCR 11 measurement and the composefs digest is
   pinned inside the signed `.cmdline`; `mjolnir-fleet status` reports both as
-  evidence. Nothing yet sets `attestation.verified` — that needs a verifier
-  controller.
+  evidence. `scripts/verify-attestation.py` is the verifier-side component: it
+  compares a report with the pinned release values and can set
+  `attestation.verified` on a MjolnirNode. A running fleet controller still has
+  to invoke it and supply the expected digests/PCR value.
 - Cilium and KubeStellar image digests must be refreshed when versions are bumped.
 - The FSDK kernel config needs Cilium's VXLAN/BPF options; verify with a boot test
   before treating the image as usable.

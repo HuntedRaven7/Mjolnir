@@ -70,6 +70,26 @@ provisioned attestation key is deferred; the fleet controller decides the
 `verified` field. No TPM is required — the report falls back to software mode.
 No shell or interpreter is used in the image.
 
+### Verifying a report
+
+`scripts/verify-attestation.py` runs on the verifier host, never on the node.
+It compares a report with the pinned values for the release and prints a JSON
+verdict; `--patch-node` writes that verdict to `status.attestation.verified`
+via `kubectl`:
+
+```sh
+python3 scripts/verify-attestation.py --report report.json \
+  --expect-composefs "$COMPOSEFS_DIGEST" \
+  --expect-uki-pe "$UKI_PE_SHA256" \
+  --expect-image-digest "$IMAGE_DIGEST" \
+  --expect-pcr11 "$PCR11" --expect-method tpm2 \
+  --patch-node mjolnir-1
+```
+
+The script exits non-zero when the verdict is false. Supplying no expectations
+still validates the report shape and method. The node never sets `verified`;
+the CRD schema allows that field only for the verifier.
+
 ## Factory reset
 
 `io.mjolnir.Fleet.FactoryReset` requires an explicit
