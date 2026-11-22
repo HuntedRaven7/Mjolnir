@@ -82,6 +82,9 @@ jobs:
 
       - name: Build image locally (PR only)
         if: github.event_name == 'pull_request'
+        env:
+          # Match the IMAGE value resolved below for PR runs.
+          BUILD_IMAGE_NAME: localhost/mjolnir
         run: just build
 
       # Ubuntu runners do not ship QEMU or OVMF. The sealed UKI boots through
@@ -133,10 +136,13 @@ jobs:
           REGISTRY_AUTH_FILE: /run/containers/0/auth.json
           # A locally built PR image has no registry signature yet.
           SKIP_COSIGN: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          # A locally built image is already in podman; do not registry-pull it.
+          SKIP_PULL: ${{ github.event_name == 'pull_request' && '1' || '0' }}
         # sudo -E is ignored on hosted runners; pass values explicitly instead.
         run: |
           sudo env IMAGE="${IMAGE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
             REGISTRY_AUTH_FILE="${REGISTRY_AUTH_FILE}" \
+            SKIP_PULL="${SKIP_PULL}" \
             ./testsuite/e2e.sh
 
       - name: Upload serial log on failure

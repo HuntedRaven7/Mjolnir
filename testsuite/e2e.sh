@@ -31,8 +31,14 @@ trap cleanup EXIT
 fail() { echo "::error::$*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 
-echo "==> pulling $IMAGE"
-podman pull "$IMAGE"
+if [ "${SKIP_PULL:-0}" = "1" ]; then
+  # Local image built in the same job (PR runs): just verify it is present.
+  echo "==> using local image $IMAGE"
+  podman image inspect "$IMAGE" >/dev/null || fail "local image $IMAGE not found"
+else
+  echo "==> pulling $IMAGE"
+  podman pull "$IMAGE"
+fi
 
 echo "==> installing image to disk"
 rm -f "$DISK" "$SERIAL"
