@@ -357,23 +357,40 @@ func install(c *config, disk string, r runner) error {
 		return fmt.Errorf("disable temporary swap on %s: %w", disk, err)
 	}
 
+	// bootc reads partition types from the udev database. Attach the loop on
+	// the host (not inside the container) so host udev can see the partitions.
+	target := disk
+	if !c.DryRun {
+		loop, err := r.output("losetup", "--find", "--show", disk)
+		if err != nil {
+			return fmt.Errorf("attach loop device for %s: %w", disk, err)
+		}
+		target = loop
+		defer r.run("losetup", "-d", loop)
+		if err := r.run("udevadm", "settle"); err != nil {
+			return fmt.Errorf("wait for udev: %w", err)
+		}
+	}
+
 	args := []string{
 		"run", "--rm", "--privileged", "--pid=host",
 		"-v", "/dev:/dev",
-		"--tmpfs", "/run/udev",
+		"-v", "/run/udev:/run/udev",
 		"-v", "/var/lib/containers:/var/lib/containers",
 		"--security-opt", "label=type:unconfined_t",
 		c.Image,
 		"bootc", "install", "to-disk",
-		"--composefs-backend",
+		"--composefs-backend", "--generic-image",
+	}
+	args = append(args,
 		"--wipe", "--filesystem", c.Filesystem,
 		"--bootloader", "systemd",
 		"--karg", "systemd.firstboot=no",
 		"--karg", "quiet",
 		"--karg", "systemd.volatile=yes",
-		"--karg", "systemd.machine_id=" + newMachineID(),
-		disk,
-	}
+		"--karg", "systemd.machine_id="+newMachineID(),
+		target,
+	)
 	if err := r.run("podman", args...); err != nil {
 		return fmt.Errorf("bootc install: %w", err)
 	}
