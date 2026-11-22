@@ -10,7 +10,8 @@ Sources handled:
   - Kubernetes binaries (kubelet/kubeadm/kubectl) from dl.k8s.io
   - cri-tools, containerd, runc, CNI plugins from GitHub release assets
   - FSDK junction ref (git describe of the pinned release branch)
-  - bootc git ref
+  - bootc git ref (manual only with --allow-bootc: its cargo2 crates must be
+    regenerated together with the ref)
   - BuildStream plugin refs (git and PyPI sdist)
 
 Usage:
@@ -178,6 +179,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="exit 1 if pins would change")
     ap.add_argument("--allow-major", action="store_true", help="allow major-version bumps for git refs")
+    ap.add_argument("--allow-bootc", action="store_true",
+                    help="also bump the bootc git ref (requires regenerating the cargo2 pins manually)")
     ap.add_argument("--binary-only", action="store_true",
                     help="only recompute binary sha256 pins; do not update git refs "
                          "(used by the PR auto-pins workflow, where ref bumps are handled by the weekly workflow)")
@@ -221,25 +224,30 @@ def main() -> int:
     except Exception as exc:
         print(f"warning: FSDK ref lookup failed: {exc}", file=sys.stderr)
 
-    # bootc and buildstream-plugins git refs from their .bst files.
-    try:
-        old_bootc = re.search(r"^  ref: (\S+)$", BOOTC_ELEMENT.read_text(), re.MULTILINE)
-        bootc_ref = git_describe(
-            "https://github.com/bootc-dev/bootc.git", r"v\d+\.\d+\.\d+",
-            current=old_bootc.group(1) if old_bootc else "",
-            allow_major=args.allow_major,
-        )
-        if bootc_ref:
-            text = BOOTC_ELEMENT.read_text()
-            old = re.search(r"^  ref: (\S+)$", text, re.MULTILINE)
-            if old and old.group(1) != bootc_ref:
-                changes.append(f"bootc ref: {old.group(1)} -> {bootc_ref}")
-                if not args.check:
-                    BOOTC_ELEMENT.write_text(
-                        re.sub(r"^  ref: \S+$", f"  ref: {bootc_ref}", text, count=1, flags=re.MULTILINE)
-                    )
-    except Exception as exc:
-        print(f"warning: bootc ref lookup failed: {exc}", file=sys.stderr)
+    # The bootc git ref cannot be bumped alone: its cargo2 source pins every
+    # crate from that revision's Cargo.lock. A ref-only bump breaks the build
+    # with an unresolved crate (e.g. rustix 1.1.5 vs required 1.1.6). Keep it
+    # frozen in automation; a maintainer regenerates the pins with --allow-bootc.
+    if args.allow_bootc:
+        try:
+            old_bootc = re.search(r"^  ref: (\S+)$", BOOTC_ELEMENT.read_text(), re.MULTILINE)
+            bootc_ref = git_describe(
+                "https://github.com/bootc-dev/bootc.git", r"v\d+\.\d+\.\d+",
+                current=old_bootc.group(1) if old_bootc else "",
+                allow_major=args.allow_major,
+            )
+            if bootc_ref:
+                text = BOOTC_ELEMENT.read_text()
+                old = re.search(r"^  ref: (\S+)$", text, re.MULTILINE)
+                if old and old.group(1) != bootc_ref:
+                    changes.append(f"bootc ref: {old.group(1)} -> {bootc_ref}")
+                    print("warning: bootc ref changed; regenerate the cargo2 pins before merging", file=sys.stderr)
+                    if not args.check:
+                        BOOTC_ELEMENT.write_text(
+                            re.sub(r"^  ref: \S+$", f"  ref: {bootc_ref}", text, count=1, flags=re.MULTILINE)
+                        )
+        except Exception as exc:
+            print(f"warning: bootc ref lookup failed: {exc}", file=sys.stderr)
 
     # Plugin refs: derive from the version in the .bst URL/ref string.
     for element, repo, pattern in [

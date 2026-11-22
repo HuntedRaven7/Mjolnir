@@ -25,8 +25,13 @@ commands, so a separate workflow handles that (see below).
 
 - Downloads each Kubernetes/cri-tools/containerd/runc/CNI asset and computes
   its sha256 for both amd64 and arm64.
-- Resolves the FSDK, bootc and BuildStream-plugins git refs via `git ls-remote`
-  and emits BuildStream's `<tag>-0-g<sha>` form.
+- Resolves the FSDK and BuildStream-plugins git refs via `git ls-remote` and
+  emits BuildStream's `<tag>-0-g<sha>` form.
+- The **bootc ref is intentionally frozen** in automation: its `cargo2` source
+  pins every crate from that revision's `Cargo.lock`, so a ref-only bump fails
+  to build (e.g. `rustix 1.1.6` required while `1.1.5` is pinned). A maintainer
+  must regenerate the cargo pins together with the ref, using
+  `scripts/update_pins.py --allow-bootc`.
 - Updates the `buildstream-plugins-community` PyPI sdist: bumps the version in
   the element URL and recomputes its sha256 ref from PyPI.
 - By default only same-major (patch/minor) git ref bumps are applied. Pass
