@@ -9,6 +9,10 @@ on:
         description: "Allow major-version bumps for git refs"
         type: boolean
         default: false
+      allow_bootc:
+        description: "Track bootc (regenerates its pinned cargo2 crates)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -32,6 +36,17 @@ jobs:
             python3 scripts/update_pins.py
           fi
           git diff --stat
+
+      # The bootc element's cargo2 source pins ~1500 crates from its
+      # Cargo.lock. Only BuildStream's tracker can regenerate them safely.
+      - uses: taiki-e/install-action@v2
+        if: inputs.allow_bootc
+        with:
+          tool: just
+
+      - name: Track bootc source and cargo pins
+        if: inputs.allow_bootc
+        run: just bst source track mgmt/bootc.bst
 
       - name: Open or update pull request
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
