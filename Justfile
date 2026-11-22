@@ -93,7 +93,7 @@ disk size="32G":
       fallocate -l {{size}} build/bootable.raw
     fi
     # Attach the loop on the host so udev can see the partition types bootc checks.
-    LOOP=$(losetup --find --show build/bootable.raw)
+    LOOP=$(losetup --find --show --partscan build/bootable.raw)
     trap 'losetup -d "$LOOP" 2>/dev/null || true' EXIT
     udevadm settle
     {{podman}} run --rm --privileged --pid=host \

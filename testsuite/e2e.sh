@@ -47,7 +47,7 @@ truncate -s 20G "$DISK"
 # by --via-loopback inside the container is invisible to host udev, so bootc
 # sees parttype=null and rejects the root partition. Attach the loop on the
 # host instead, let udev settle, and pass the device into the container.
-LOOP=$(losetup --find --show "$DISK")
+LOOP=$(losetup --find --show --partscan "$DISK")
 udevadm settle
 podman run --rm --privileged --pid=host \
   -v /dev:/dev -v /run/udev:/run/udev \
