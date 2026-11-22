@@ -79,7 +79,7 @@ podman run --rm --privileged --pid=host \
   -v "$ROOTFS:/target" \
   --security-opt label=type:unconfined_t \
   "$IMAGE" bootc install to-filesystem \
-    --source-imgref "oci-archive:/mnt/e2e/image.oci.tar:latest" \
+    --source-imgref "oci-archive:/mnt/e2e/image.oci.tar:${IMAGE}" \
     --karg systemd.firstboot=no --karg quiet \
     --karg systemd.volatile=yes \
     --karg systemd.machine_id="$(cat /proc/sys/kernel/random/uuid)" \
