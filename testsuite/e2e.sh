@@ -63,6 +63,10 @@ PART
 udevadm settle
 mkfs.vfat -F32 "${LOOP}p2" >/dev/null
 mkfs.btrfs -f "${LOOP}p3" >/dev/null
+# Pulling a locally built image straight from containers-storage into the
+# composefs repository can fail mid-blob; hand bootc an OCI archive instead.
+OCI_ARCHIVE="$BUILD/image.oci.tar"
+podman save --format oci-archive -o "$OCI_ARCHIVE" "$IMAGE"
 ROOTFS="$BUILD/rootfs"
 mkdir -p "$ROOTFS"
 mount "${LOOP}p3" "$ROOTFS"
@@ -71,9 +75,11 @@ mount "${LOOP}p2" "$ROOTFS/boot/efi"
 podman run --rm --privileged --pid=host \
   -v /dev:/dev \
   -v /var/lib/containers:/var/lib/containers \
+  -v "$BUILD:/mnt/e2e" \
   -v "$ROOTFS:/target" \
   --security-opt label=type:unconfined_t \
   "$IMAGE" bootc install to-filesystem \
+    --source-imgref "oci-archive:/mnt/e2e/image.oci.tar:latest" \
     --karg systemd.firstboot=no --karg quiet \
     --karg systemd.volatile=yes \
     --karg systemd.machine_id="$(cat /proc/sys/kernel/random/uuid)" \
