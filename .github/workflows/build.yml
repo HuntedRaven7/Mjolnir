@@ -226,65 +226,21 @@ jobs:
           fi
           just cache-push
 
-  # Cross-arch validation only: the published image stays x86_64 for now.
-  # BuildStream selects the target with the project option `-o arch aarch64`;
-  # the arm64 varlink helper is pinned in include/versions.yml.
-  image-arm64:
+  # Validate the aarch64 element graph and pins. A full cross-build is not
+  # possible with the pinned bst2 image: buildbox-run reports
+  # "ISA 'aarch64' is not supported by buildbox-run" as soon as an element
+  # needs to compile locally. That needs a remote-execution worker (or an
+  # aarch64 runner), which this repo does not have yet.
+  validate-arm64:
     needs: validate
     runs-on: ubuntu-26.04
-    timeout-minutes: 240
-    env:
-      PODMAN: "sudo podman"
-      BUILD_IMAGE_TAG: latest-arm64
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Normalize registry owner
-        run: echo "IMAGE_OWNER=${OWNER,,}" >> "$GITHUB_ENV"
-        env:
-          OWNER: ${{ github.repository_owner }}
-
-      - uses: projectbluefin/actions/bootc-build/setup-runner@v1
-        with:
-          storage-backend: btrfs
-          native-overlay: "true"
-          install-tools: '["just", "cosign", "oras"]'
 
       - uses: taiki-e/install-action@v2
         with:
           tool: just
 
-      - name: Restore BuildStream cache (aarch64)
-        continue-on-error: true
-        env:
-          BST_CACHE_REF: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir-cache:arm64
-          BST_CACHE_KEY: bst-aarch64-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: just cache-pull
-
-      - name: Build and export aarch64 image
-        id: build-arm64
-        run: |
-          just bst -o arch aarch64 build oci/mjolnir.bst
-          just export aarch64
-
-      - name: Image content checks (aarch64)
-        run: just test
-
-      - name: bootc lint (aarch64)
-        run: just lint
-
-      - name: Save BuildStream cache (aarch64)
-        if: always()
-        continue-on-error: true
-        env:
-          BST_CACHE_REF: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir-cache:arm64
-          BST_CACHE_KEY: bst-aarch64-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: |
-          if [ "${{ steps.build-arm64.outcome }}" != "success" ]; then
-            unset BST_CACHE_KEY
-          fi
-          just cache-push
+      - name: Resolve aarch64 element graph
+        run: just bst -o arch aarch64 show oci/mjolnir.bst
