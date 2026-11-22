@@ -9,6 +9,22 @@ Credentials are read by `mjolnir-helper` from
 `/run/credentials/@system/<name>` (system credentials) or from a unit's
 `$CREDENTIALS_DIRECTORY`. They never live in the image or in the repository.
 
+Use `scripts/make-credentials.py` to build the directory on the provisioning
+host; it validates the values, writes files as 0600 in a 0700 directory, and
+prints only the credential *names*:
+
+```sh
+python3 scripts/make-credentials.py --out ./cred --role worker \
+  --join-token "$TOKEN" --ca-cert-hash "sha256:$HASH" \
+  --endpoint control-plane.example:6443 \
+  --wifi-ssid homelab --wifi-psk "$PSK" \
+  --tls-ca ./client-ca.pem
+```
+
+Mount the resulting directory where the provisioning system expects it (for
+example `/run/credentials/@system/`). Never commit it: add it to `.gitignore` or
+keep it outside the repository.
+
 ## Required credentials
 
 | Name | Used by | Meaning |
@@ -20,6 +36,8 @@ Credentials are read by `mjolnir-helper` from
 | `wifi-ssid` | wifi | WiFi network name (station mode) |
 | `wifi-psk` | wifi | 64-character hex WPA2/WPA3 PSK |
 | `varlink-httpd.tls.trust` | varlink-httpd | PEM CA used to verify mTLS clients |
+| `registry-user`, `registry-token` | installer | optional GHCR credentials for the image pull |
+| `wifi-ssid`, `wifi-psk` | installer | optional WiFi used during installation |
 
 `wifi-*` credentials are optional; without them the node uses wired networking
 only. `join-*` credentials are required on workers and ignored on the control
