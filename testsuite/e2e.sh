@@ -27,6 +27,7 @@ cleanup() {
     rm -f "$PIDFILE"
   fi
   if [ -n "$LOOP" ]; then
+    umount "${LOOP}p2" "${LOOP}p3" 2>/dev/null || true
     losetup -d "$LOOP" 2>/dev/null || true
   fi
 }
@@ -49,18 +50,34 @@ rm -f "$DISK" "$SERIAL"
 # Sparse allocation: fallocate would consume the full size on the runner's
 # limited root filesystem. bootc only writes the sectors it needs.
 truncate -s 20G "$DISK"
-# bootc reads GPT partition types from the udev database. A loop device made
-# by --via-loopback inside the container is invisible to host udev, so bootc
-# sees parttype=null and rejects the root partition. Attach the loop on the
-# host instead, let udev settle, and pass the device into the container.
+# bootc's to-disk path verifies GPT partition types via the udev database,
+# which is unavailable for loop devices created inside a container. Prepare
+# the DPS partitions on the host with sfdisk and use to-filesystem instead.
 LOOP=$(losetup --find --show --partscan "$DISK")
+sfdisk "$LOOP" >/dev/null <<PART
+label: gpt
+start=2048, size=1M, type=21686148-6449-6E6F-744E-656564454649
+size=2G, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+type=4F68BCE3-E8CD-4DB1-96E7-FBCaf984B709
+PART
 udevadm settle
+mkfs.vfat -F32 "${LOOP}p2" >/dev/null
+mkfs.btrfs -f "${LOOP}p3" >/dev/null
+ROOTFS="$BUILD/rootfs"
+mkdir -p "$ROOTFS/boot/efi"
+mount "${LOOP}p3" "$ROOTFS"
+mount "${LOOP}p2" "$ROOTFS/boot/efi"
 podman run --rm --privileged --pid=host \
-  -v /dev:/dev --tmpfs /run/udev \
+  -v /dev:/dev \
   -v /var/lib/containers:/var/lib/containers \
+  -v "$ROOTFS:/target" \
   --security-opt label=type:unconfined_t \
-  "$IMAGE" bootc install to-disk --composefs-backend --generic-image \
-    --filesystem btrfs --wipe --bootloader systemd "$LOOP"
+  "$IMAGE" bootc install to-filesystem \
+    --karg systemd.firstboot=no --karg quiet \
+    --karg systemd.volatile=yes \
+    --karg systemd.machine_id="$(cat /proc/sys/kernel/random/uuid)" \
+    /target
+umount "$ROOTFS/boot/efi" "$ROOTFS" || true
 losetup -d "$LOOP"
 LOOP=""
 # No --karg: with a signed UKI, bootc rejects externally supplied kernel

@@ -1,9 +1,5 @@
 [install]
 bootloader = "systemd"
-# Loopback/e2e installs cannot read GPT partition types from the udev
-# database, which bootc uses for its Discoverable Partitions check. Use the
-# traditional labelled layout instead.
-discoverable-partitions = false
 # systemd-repart applies repart.d definitions automatically during install;
 # the old `run-repart` key is rejected by current bootc versions.
 #
