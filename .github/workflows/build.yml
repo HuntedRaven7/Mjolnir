@@ -225,3 +225,22 @@ jobs:
             unset BST_CACHE_KEY
           fi
           just cache-push
+
+  # Validate the aarch64 element graph and pins. A full cross-build is not
+  # possible with the pinned bst2 image: buildbox-run reports
+  # "ISA 'aarch64' is not supported by buildbox-run" as soon as an element
+  # needs to compile locally. That needs a remote-execution worker (or an
+  # aarch64 runner), which this repo does not have yet.
+  validate-arm64:
+    needs: validate
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Resolve aarch64 element graph
+        run: just bst -o arch aarch64 show oci/mjolnir.bst

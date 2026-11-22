@@ -5,7 +5,7 @@ variables:
   # -------------------------------------------------------------------------
   # Build toolchain
   # -------------------------------------------------------------------------
-  fsdk-ref: "freedesktop-sdk-26.08.4-0-g114ae909ec9881958bd507c8b4414aa33f758d2b"
+  fsdk-ref: "freedesktop-sdk-26.08.4-0-g2c0739492a19207568d45bf5fc69913db57c9657"
 
   # Installer ISO host tooling (not part of the bootc image). The dracut live
   # modules in installer/dracut-modules were extracted from this pinned RPM.

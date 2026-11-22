@@ -37,11 +37,11 @@ bst-build:
 
 # Checkout the OCI layout and load it into podman. The image intentionally has
 # no shell, so the export step does not use a Dockerfile `RUN`.
-export:
+export arch="x86_64":
     #!/usr/bin/env bash
     set -euo pipefail
     rm -rf .build-out
-    just bst artifact checkout oci/mjolnir.bst --directory /src/.build-out
+    just bst -o arch "{{arch}}" artifact checkout oci/mjolnir.bst --directory /src/.build-out
     IMAGE_ID=$({{podman}} pull -q oci:.build-out)
     {{podman}} tag "$IMAGE_ID" "{{image_name}}:{{image_tag}}"
     {{podman}} images | grep -E '{{image_name}}|REPOSITORY' || true

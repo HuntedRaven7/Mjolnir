@@ -35,6 +35,7 @@ type config struct {
 	DryRun     bool   `json:"dryRun"`
 	Reboot     bool   `json:"reboot"`
 	Filesystem string `json:"filesystem"`
+	Encrypted  bool   `json:"encrypted"`
 	Yes        bool   `json:"-"`
 }
 
@@ -124,7 +125,7 @@ type diskInfo struct {
 	Model      string `json:"model"`
 	Serial     string `json:"serial"`
 	Tran       string `json:"tran"`
-	Rm         string `json:"rm"`
+	Rm         bool   `json:"rm"`
 	Mountpoint string `json:"mountpoint"`
 }
 
@@ -155,7 +156,7 @@ func disks(r runner) ([]diskInfo, error) {
 	}
 	var result []diskInfo
 	for _, d := range payload.BlockDevices {
-		if d.Type != "disk" || d.Rm == "1" || d.Mountpoint != "" || bootPaths[d.Path] {
+		if d.Type != "disk" || d.Rm || d.Mountpoint != "" || bootPaths[d.Path] {
 			continue
 		}
 		result = append(result, d)
@@ -382,6 +383,10 @@ func install(c *config, disk string, r runner) error {
 		"bootc", "install", "to-disk",
 		"--composefs-backend", "--generic-image",
 	}
+	if c.Encrypted {
+		// Bind the root filesystem unlock to the machine's TPM2 device.
+		args = append(args, "--block-setup", "tpm2-luks")
+	}
 	args = append(args,
 		"--wipe", "--filesystem", c.Filesystem,
 		"--bootloader", "systemd",
@@ -507,6 +512,7 @@ func main() {
 	configPath := flag.String("config", "", "JSON config file (skips interactive prompts for values it sets)")
 	dryRun := flag.Bool("dry-run", false, "print commands without executing them")
 	yes := flag.Bool("yes", false, "unattended: no prompts, pick the first eligible disk if none is configured")
+	encrypt := flag.Bool("encrypt", false, "bind the root filesystem to TPM2 with LUKS")
 	version := flag.Bool("version", false, "print version")
 	flag.Parse()
 
@@ -524,6 +530,9 @@ func main() {
 		c.DryRun = true
 	}
 	c.Yes = *yes
+	if *encrypt {
+		c.Encrypted = true
+	}
 
 	var r runner = realRunner{}
 	if c.DryRun {
@@ -553,6 +562,9 @@ func main() {
 		}
 		if c.Role == "" && *configPath == "" {
 			c.Role = prompt(in, "Node role (control-plane/worker)", "worker")
+		}
+		if !c.Encrypted && strings.EqualFold(prompt(in, "Encrypt root with TPM2 (LUKS)?", "n"), "y") {
+			c.Encrypted = true
 		}
 	}
 
