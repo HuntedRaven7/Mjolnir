@@ -67,6 +67,13 @@ mkfs.btrfs -f "${LOOP}p3" >/dev/null
 # composefs repository can fail mid-blob; hand bootc an OCI archive instead.
 OCI_ARCHIVE="$BUILD/image.oci.tar"
 podman save --format oci-archive -o "$OCI_ARCHIVE" "$IMAGE"
+# --bootloader none trims boot files from the installed root, so stage them
+# from the image itself before installing.
+SRC=$(podman create "$IMAGE" /usr/bin/true)
+podman cp "$SRC:/usr/lib/systemd/boot/efi/systemd-bootx64.efi" "$BUILD/systemd-bootx64.efi"
+rm -rf "$BUILD/image-efi"
+podman cp "$SRC:/boot/EFI/Linux" "$BUILD/image-efi"
+podman rm -f "$SRC"
 ROOTFS="$BUILD/rootfs"
 mkdir -p "$ROOTFS"
 mount "${LOOP}p3" "$ROOTFS"
@@ -88,11 +95,10 @@ podman run --rm --privileged --pid=host \
 
 # bootc installed with --bootloader none (no bootupd in this image), so
 # populate the ESP ourselves: systemd-boot plus the signed UKI.
-BOOT_EFI=$(find "$ROOTFS/usr/lib/systemd" -name 'systemd-boot*.efi' 2>/dev/null | head -n1 || true)
-[ -n "$BOOT_EFI" ] || fail "no systemd-boot EFI binary in installed root"
-install -Dm644 "$BOOT_EFI" "$ROOTFS/boot/efi/EFI/BOOT/BOOTX64.EFI"
-UKI=$(find "$ROOTFS/boot" -path "$ROOTFS/boot/efi" -prune -o -name '*.efi' -print 2>/dev/null | head -n1 || true)
-[ -n "$UKI" ] || fail "no UKI found in installed root"
+[ -f "$BUILD/systemd-bootx64.efi" ] || fail "no systemd-boot EFI binary staged from image"
+install -Dm644 "$BUILD/systemd-bootx64.efi" "$ROOTFS/boot/efi/EFI/BOOT/BOOTX64.EFI"
+UKI=$(find "$BUILD/image-efi" -name '*.efi' 2>/dev/null | head -n1 || true)
+[ -n "$UKI" ] || fail "no UKI staged from image"
 install -Dm644 "$UKI" "$ROOTFS/boot/efi/EFI/Linux/$(basename "$UKI")"
 
 umount "$ROOTFS/boot/efi" "$ROOTFS" || true
