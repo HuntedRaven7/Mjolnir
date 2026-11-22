@@ -35,6 +35,7 @@ type config struct {
 	DryRun     bool   `json:"dryRun"`
 	Reboot     bool   `json:"reboot"`
 	Filesystem string `json:"filesystem"`
+	Encrypted  bool   `json:"encrypted"`
 	Yes        bool   `json:"-"`
 }
 
@@ -365,14 +366,20 @@ func install(c *config, disk string, r runner) error {
 		c.Image,
 		"bootc", "install", "to-disk",
 		"--composefs-backend",
+	}
+	if c.Encrypted {
+		// Bind the root filesystem unlock to the machine's TPM2 device.
+		args = append(args, "--block-setup", "tpm2-luks")
+	}
+	args = append(args,
 		"--wipe", "--filesystem", c.Filesystem,
 		"--bootloader", "systemd",
 		"--karg", "systemd.firstboot=no",
 		"--karg", "quiet",
 		"--karg", "systemd.volatile=yes",
-		"--karg", "systemd.machine_id=" + newMachineID(),
+		"--karg", "systemd.machine_id="+newMachineID(),
 		disk,
-	}
+	)
 	if err := r.run("podman", args...); err != nil {
 		return fmt.Errorf("bootc install: %w", err)
 	}
@@ -489,6 +496,7 @@ func main() {
 	configPath := flag.String("config", "", "JSON config file (skips interactive prompts for values it sets)")
 	dryRun := flag.Bool("dry-run", false, "print commands without executing them")
 	yes := flag.Bool("yes", false, "unattended: no prompts, pick the first eligible disk if none is configured")
+	encrypt := flag.Bool("encrypt", false, "bind the root filesystem to TPM2 with LUKS")
 	version := flag.Bool("version", false, "print version")
 	flag.Parse()
 
@@ -506,6 +514,9 @@ func main() {
 		c.DryRun = true
 	}
 	c.Yes = *yes
+	if *encrypt {
+		c.Encrypted = true
+	}
 
 	var r runner = realRunner{}
 	if c.DryRun {
@@ -535,6 +546,9 @@ func main() {
 		}
 		if c.Role == "" && *configPath == "" {
 			c.Role = prompt(in, "Node role (control-plane/worker)", "worker")
+		}
+		if !c.Encrypted && strings.EqualFold(prompt(in, "Encrypt root with TPM2 (LUKS)?", "n"), "y") {
+			c.Encrypted = true
 		}
 	}
 
