@@ -88,10 +88,10 @@ podman run --rm --privileged --pid=host \
 
 # bootc installed with --bootloader none (no bootupd in this image), so
 # populate the ESP ourselves: systemd-boot plus the signed UKI.
-BOOT_EFI=$(find "$ROOTFS/usr/lib/systemd/boot/efi" -name 'systemd-boot*.efi' 2>/dev/null | head -n1)
+BOOT_EFI=$(find "$ROOTFS/usr/lib/systemd" -name 'systemd-boot*.efi' 2>/dev/null | head -n1 || true)
 [ -n "$BOOT_EFI" ] || fail "no systemd-boot EFI binary in installed root"
 install -Dm644 "$BOOT_EFI" "$ROOTFS/boot/efi/EFI/BOOT/BOOTX64.EFI"
-UKI=$(find "$ROOTFS/boot" -path "$ROOTFS/boot/efi" -prune -o -name '*.efi' -print 2>/dev/null | head -n1)
+UKI=$(find "$ROOTFS/boot" -path "$ROOTFS/boot/efi" -prune -o -name '*.efi' -print 2>/dev/null | head -n1 || true)
 [ -n "$UKI" ] || fail "no UKI found in installed root"
 install -Dm644 "$UKI" "$ROOTFS/boot/efi/EFI/Linux/$(basename "$UKI")"
 
