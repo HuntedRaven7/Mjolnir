@@ -52,14 +52,17 @@ Pass `--config <file>` to skip prompts for values set in the JSON:
   "psk": "<64 hex chars>",
   "registryUser": "",
   "registryToken": "",
-  "filesystem": "btrfs"
+  "filesystem": "btrfs",
+  "encrypted": false
 }
 ```
 
 `--yes` disables all prompts and selects the configured disk — or the first
 eligible disk if none is configured. The service in the ISO uses this flag
 because it has no tty; an interactive terminal should omit it to get the disk
-confirmation prompt. `--dry-run` prints the commands without executing them;
+confirmation prompt. Set `"encrypted": true` (or pass `--encrypt`) for a
+TPM2-bound LUKS root (`bootc install --block-setup tpm2-luks`); the machine must
+have a TPM2 device. `--dry-run` prints the commands without executing them;
 `--version` prints the installer version.
 
 ## Provisioning the installed node
