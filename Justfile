@@ -97,7 +97,7 @@ disk size="32G":
     trap 'losetup -d "$LOOP" 2>/dev/null || true' EXIT
     udevadm settle
     {{podman}} run --rm --privileged --pid=host \
-      -v /dev:/dev -v /run/udev:/run/udev \
+      -v /dev:/dev --tmpfs /run/udev \
       -v /var/lib/containers:/var/lib/containers \
       "{{image_name}}:{{image_tag}}" \
       bootc install to-disk --composefs-backend --generic-image \

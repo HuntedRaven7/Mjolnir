@@ -56,7 +56,7 @@ truncate -s 20G "$DISK"
 LOOP=$(losetup --find --show --partscan "$DISK")
 udevadm settle
 podman run --rm --privileged --pid=host \
-  -v /dev:/dev -v /run/udev:/run/udev \
+  -v /dev:/dev --tmpfs /run/udev \
   -v /var/lib/containers:/var/lib/containers \
   --security-opt label=type:unconfined_t \
   "$IMAGE" bootc install to-disk --composefs-backend --generic-image \
