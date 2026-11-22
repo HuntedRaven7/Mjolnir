@@ -1,7 +1,7 @@
 [install]
 bootloader = "systemd"
-# Create the persistent state partition from our repart.d definition.
-run-repart = true
+# systemd-repart applies repart.d definitions automatically during install;
+# the old `run-repart` key is rejected by current bootc versions.
 
 [install.filesystem.root]
 type = "btrfs"
