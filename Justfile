@@ -92,14 +92,16 @@ disk size="32G":
       mkdir -p build
       fallocate -l {{size}} build/bootable.raw
     fi
+    # Attach the loop on the host so udev can see the partition types bootc checks.
+    LOOP=$(losetup --find --show build/bootable.raw)
+    trap 'losetup -d "$LOOP" 2>/dev/null || true' EXIT
+    udevadm settle
     {{podman}} run --rm --privileged --pid=host \
-      -v /dev:/dev --tmpfs /run/udev \
+      -v /dev:/dev -v /run/udev:/run/udev \
       -v /var/lib/containers:/var/lib/containers \
-      -v "{{justfile_directory()}}:/data" \
-      \
       "{{image_name}}:{{image_tag}}" \
-      bootc install to-disk --composefs-backend --via-loopback /data/build/bootable.raw \
-        --filesystem btrfs --wipe --bootloader systemd \
+      bootc install to-disk --composefs-backend --generic-image \
+        --filesystem btrfs --wipe --bootloader systemd "$LOOP" \
         --karg systemd.firstboot=no --karg quiet
 
 # Boot the raw disk image headlessly with a serial console.

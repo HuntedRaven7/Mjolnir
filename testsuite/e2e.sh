@@ -20,10 +20,14 @@ done
 [ "$(id -u)" = 0 ] || { echo "run as root (bootc install requires it)" >&2; exit 1; }
 
 mkdir -p "$BUILD"
+LOOP=""
 cleanup() {
   if [ -f "$PIDFILE" ]; then
     kill "$(cat "$PIDFILE")" 2>/dev/null || true
     rm -f "$PIDFILE"
+  fi
+  if [ -n "$LOOP" ]; then
+    losetup -d "$LOOP" 2>/dev/null || true
   fi
 }
 trap cleanup EXIT
@@ -39,15 +43,20 @@ rm -f "$DISK" "$SERIAL"
 # Sparse allocation: fallocate would consume the full size on the runner's
 # limited root filesystem. bootc only writes the sectors it needs.
 truncate -s 20G "$DISK"
-# bootc reads GPT partition types from the udev database; without mounting it
-# the via-loopback install sees parttype=null and rejects the root partition.
+# bootc reads GPT partition types from the udev database. A loop device made
+# by --via-loopback inside the container is invisible to host udev, so bootc
+# sees parttype=null and rejects the root partition. Attach the loop on the
+# host instead, let udev settle, and pass the device into the container.
+LOOP=$(losetup --find --show "$DISK")
+udevadm settle
 podman run --rm --privileged --pid=host \
-  -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
-  --tmpfs /run/udev \
-  -v "$BUILD:/mnt/e2e" \
+  -v /dev:/dev -v /run/udev:/run/udev \
+  -v /var/lib/containers:/var/lib/containers \
   --security-opt label=type:unconfined_t \
-  "$IMAGE" bootc install to-disk --composefs-backend --via-loopback /mnt/e2e/disk.raw \
-    --filesystem btrfs --wipe --bootloader systemd
+  "$IMAGE" bootc install to-disk --composefs-backend --generic-image \
+    --filesystem btrfs --wipe --bootloader systemd "$LOOP"
+losetup -d "$LOOP"
+LOOP=""
 # No --karg: with a signed UKI, bootc rejects externally supplied kernel
 # arguments because they would not be covered by the signature. All kargs
 # (systemd.volatile=yes, console, quiet) are baked into the signed .cmdline.
