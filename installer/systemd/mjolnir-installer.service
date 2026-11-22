@@ -1,16 +1,21 @@
 [Unit]
 Description=Mjolnir installer
-After=network-online.target
-Wants=network-online.target
-Conflicts=getty@tty1.service
+# Do not wait for network-online.target: on a machine with no working network
+# that target blocks for ~90s and the installer looks like it never starts.
+# The helper retries a failed pull via Restart=on-failure.
+After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
 ExecStart=/opt/mjolnir-install --config /etc/mjolnir-installer.json
-StandardInput=tty-force
-TTYPath=/dev/console
-TTYReset=yes
-TTYVHangup=yes
+# Do not pin stdin/stdout to /dev/console. Headless VMs and machines where
+# /dev/console is not the console being watched made the installer impossible
+# to see or drive. Log to the journal AND every console; with no tty on stdin
+# the prompt() helper falls back to its default (the first disk), so the
+# installer can never block waiting for a console that does not exist.
+StandardOutput=journal+console
+StandardError=journal+console
 Restart=on-failure
 RestartSec=2s
 
