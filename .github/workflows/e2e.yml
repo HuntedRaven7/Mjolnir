@@ -23,6 +23,10 @@ on:
         description: "Image ref to test"
         type: string
         default: ghcr.io/huntedraven7/mjolnir:testing
+      local_build:
+        description: "Build the image locally instead of pulling :testing"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -40,7 +44,7 @@ jobs:
       packages: read
       id-token: write
     if: >-
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' || inputs.local_build) ||
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     env:
@@ -57,7 +61,7 @@ jobs:
 
       # PR builds do not push an image, so build and load it locally.
       - name: Set up runner for local image build (PR only)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || inputs.local_build
         uses: projectbluefin/actions/bootc-build/setup-runner@v1
         with:
           storage-backend: btrfs
@@ -65,13 +69,13 @@ jobs:
           install-tools: '["just", "cosign", "oras"]'
 
       - name: Normalize registry owner (PR only)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || inputs.local_build
         run: echo "IMAGE_OWNER=${OWNER,,}" >> "$GITHUB_ENV"
         env:
           OWNER: ${{ github.repository_owner }}
 
       - name: Restore BuildStream cache (PR only)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || inputs.local_build
         continue-on-error: true
         env:
           BST_CACHE_REF: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir-cache
@@ -81,7 +85,7 @@ jobs:
         run: just cache-pull
 
       - name: Build image locally (PR only)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || inputs.local_build
         env:
           # Match the IMAGE value resolved below for PR runs.
           BUILD_IMAGE_NAME: localhost/mjolnir
@@ -105,7 +109,7 @@ jobs:
       # Log in as root: podman, skopeo and cosign then all find the credentials
       # in the same auth file. Not needed for PR builds (local image).
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !inputs.local_build
         env:
           REGISTRY_AUTH_FILE: /run/containers/0/auth.json
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,7 +124,7 @@ jobs:
           INPUT_IMAGE: ${{ inputs.image }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ inputs.local_build }}" = "true" ]; then
             ref="localhost/mjolnir:latest"
           else
             # GHCR requires a lowercase repository path; github.repository
@@ -135,9 +139,9 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           REGISTRY_AUTH_FILE: /run/containers/0/auth.json
           # A locally built PR image has no registry signature yet.
-          SKIP_COSIGN: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          SKIP_COSIGN: ${{ (github.event_name == 'pull_request' || inputs.local_build) && '1' || '0' }}
           # A locally built image is already in podman; do not registry-pull it.
-          SKIP_PULL: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+          SKIP_PULL: ${{ (github.event_name == 'pull_request' || inputs.local_build) && '1' || '0' }}
         # sudo -E is ignored on hosted runners; pass values explicitly instead.
         run: |
           sudo env IMAGE="${IMAGE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
