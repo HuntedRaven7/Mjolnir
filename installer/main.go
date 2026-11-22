@@ -358,31 +358,37 @@ func install(c *config, disk string, r runner) error {
 		return fmt.Errorf("disable temporary swap on %s: %w", disk, err)
 	}
 
-	// bootc reads partition types from the udev database. Attach the loop on
-	// the host (not inside the container) so host udev can see the partitions.
+	// For a raw disk image, attach a loop on the host so udev can see its
+	// partitions; for a real block device install directly to it.
 	target := disk
+	udev := []string{"-v", "/run/udev:/run/udev"}
 	if !c.DryRun {
-		loop, err := r.output("losetup", "--find", "--show", "--partscan", disk)
-		if err != nil {
-			return fmt.Errorf("attach loop device for %s: %w", disk, err)
-		}
-		target = loop
-		defer r.run("losetup", "-d", loop)
-		if err := r.run("udevadm", "settle"); err != nil {
-			return fmt.Errorf("wait for udev: %w", err)
+		if st, err := os.Stat(disk); err == nil && st.Mode().IsRegular() {
+			loop, err := r.output("losetup", "--find", "--show", "--partscan", disk)
+			if err != nil {
+				return fmt.Errorf("attach loop device for %s: %w", disk, err)
+			}
+			target = loop
+			defer r.run("losetup", "-d", loop)
+			udev = []string{"--tmpfs", "/run/udev"}
+			if err := r.run("udevadm", "settle"); err != nil {
+				return fmt.Errorf("wait for udev: %w", err)
+			}
 		}
 	}
 
 	args := []string{
 		"run", "--rm", "--privileged", "--pid=host",
 		"-v", "/dev:/dev",
-		"--tmpfs", "/run/udev",
+	}
+	args = append(args, udev...)
+	args = append(args,
 		"-v", "/var/lib/containers:/var/lib/containers",
 		"--security-opt", "label=type:unconfined_t",
 		c.Image,
 		"bootc", "install", "to-disk",
 		"--composefs-backend", "--generic-image",
-	}
+	)
 	if c.Encrypted {
 		// Bind the root filesystem unlock to the machine's TPM2 device.
 		args = append(args, "--block-setup", "tpm2-luks")

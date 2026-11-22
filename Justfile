@@ -92,17 +92,31 @@ disk size="32G":
       mkdir -p build
       fallocate -l {{size}} build/bootable.raw
     fi
-    # Attach the loop on the host so udev can see the partition types bootc checks.
+    # Prepare a DPS disk on the host and use to-filesystem: to-disk's
+    # partition-type check cannot work for loop devices in a container.
     LOOP=$(losetup --find --show --partscan build/bootable.raw)
-    trap 'losetup -d "$LOOP" 2>/dev/null || true' EXIT
+    ROOTFS=build/disk-rootfs
+    trap 'umount "$ROOTFS/boot/efi" "$ROOTFS" 2>/dev/null || true; losetup -d "$LOOP" 2>/dev/null || true' EXIT
+    sfdisk "$LOOP" >/dev/null <<PART
+    label: gpt
+    start=2048, size=1M, type=21686148-6449-6E6F-744E-656564454649
+    size=2G, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+    type=4F68BCE3-E8CD-4DB1-96E7-FBCaf984B709
+    PART
     udevadm settle
+    mkfs.vfat -F32 "${LOOP}p2" >/dev/null
+    mkfs.btrfs -f "${LOOP}p3" >/dev/null
+    mkdir -p "$ROOTFS"
+    mount "${LOOP}p3" "$ROOTFS"
+    mkdir -p "$ROOTFS/boot/efi"
+    mount "${LOOP}p2" "$ROOTFS/boot/efi"
     {{podman}} run --rm --privileged --pid=host \
-      -v /dev:/dev --tmpfs /run/udev \
-      -v /var/lib/containers:/var/lib/containers \
-      "{{image_name}}:{{image_tag}}" \
-      bootc install to-disk --composefs-backend --generic-image \
-        --filesystem btrfs --wipe --bootloader systemd "$LOOP" \
-        --karg systemd.firstboot=no --karg quiet
+      -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
+      -v "{{justfile_directory()}}/$ROOTFS:/target" \
+      --security-opt label=type:unconfined_t \
+      "{{image_name}}:{{image_tag}}" bootc install to-filesystem \
+        --karg systemd.firstboot=no --karg quiet /target
+    umount "$ROOTFS/boot/efi" "$ROOTFS"
 
 # Boot the raw disk image headlessly with a serial console.
 vm:
