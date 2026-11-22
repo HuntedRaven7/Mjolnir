@@ -193,10 +193,31 @@ func install(c *config, disk string, r runner) error {
 	if err := r.run("wipefs", "--all", "--force", disk); err != nil {
 		return fmt.Errorf("wipe %s: %w", disk, err)
 	}
+
+	// The live root's overlay is tmpfs-backed, so pulling a multi-GB image can
+	// exhaust RAM on modest VMs. Use the target disk as temporary swap for the
+	// pull, then release it before bootc install repartitions the disk. Unlike
+	// mounting the disk at /var/lib/containers, this leaves no live filesystem
+	// for --wipe to tear down underneath the running container.
+	if err := r.run("mkswap", "-f", disk); err != nil {
+		return fmt.Errorf("make temporary swap on %s: %w", disk, err)
+	}
+	if err := r.run("swapon", disk); err != nil {
+		return fmt.Errorf("enable temporary swap on %s: %w", disk, err)
+	}
+	// /run is the tmpfs backing the overlay's writable layer; allow it to use
+	// the swap we just added. Failure is harmless if it is not a tmpfs.
+	_ = r.run("mount", "-o", "remount,size=8G", "/run")
+
 	pull := []string{"pull", c.Image}
 	if err := r.run("podman", pull...); err != nil {
 		return fmt.Errorf("pull %s: %w", c.Image, err)
 	}
+	// Release the disk before bootc install wipes and repartitions it.
+	if err := r.run("swapoff", disk); err != nil {
+		return fmt.Errorf("disable temporary swap on %s: %w", disk, err)
+	}
+
 	args := []string{
 		"run", "--rm", "--privileged", "--pid=host",
 		"-v", "/dev:/dev",
