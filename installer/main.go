@@ -40,6 +40,7 @@ type config struct {
 
 type runner interface {
 	run(name string, args ...string) error
+	runStdin(input string, name string, args ...string) error
 	output(name string, args ...string) (string, error)
 }
 
@@ -48,6 +49,14 @@ type realRunner struct{}
 func (realRunner) run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func (realRunner) runStdin(input string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = strings.NewReader(input)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -62,6 +71,10 @@ type dryRunner struct{ real runner }
 
 func (d dryRunner) run(name string, args ...string) error {
 	fmt.Printf("[dry-run] %s %s\n", name, strings.Join(args, " "))
+	return nil
+}
+func (d dryRunner) runStdin(input string, name string, args ...string) error {
+	fmt.Printf("[dry-run] %s %s (stdin from credential)\n", name, strings.Join(args, " "))
 	return nil
 }
 func (d dryRunner) output(name string, args ...string) (string, error) {
@@ -246,6 +259,9 @@ func wifiConnect(r runner, ssid, psk string, dry bool) error {
 	if ssid == "" || psk == "" {
 		return nil
 	}
+	if len(psk) != 64 || !regexp.MustCompile(`^[0-9a-fA-F]{64}$`).MatchString(psk) {
+		return errors.New("wifi-psk must be a 64 character hex string")
+	}
 	if dry {
 		fmt.Printf("[dry-run] write WiFi keyfile for %s and nmcli up\n", ssid)
 		return nil
@@ -269,11 +285,32 @@ func wifiConnect(r runner, ssid, psk string, dry bool) error {
 	return nil
 }
 
+// readCredential reads a systemd credential supplied by the provisioning
+// system. Unit credentials take precedence over system credentials.
+func readCredential(name string) string {
+	var paths []string
+	if dir := os.Getenv("CREDENTIALS_DIRECTORY"); dir != "" {
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	paths = append(paths,
+		filepath.Join("/run/credentials/mjolnir-installer.service", name),
+		filepath.Join("/run/credentials/@system", name),
+	)
+	for _, path := range paths {
+		if b, err := os.ReadFile(path); err == nil {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	return ""
+}
+
 func registryLogin(r runner, user, token string) error {
 	if user == "" || token == "" {
 		return nil
 	}
-	return r.run("podman", "login", "ghcr.io", "-u", user, "--password-stdin")
+	// --password-stdin needs the token on the child's stdin; passing it as an
+	// argv would leak it in the process table.
+	return r.runStdin(token+"\n", "podman", "login", "ghcr.io", "-u", user, "--password-stdin")
 }
 
 func newMachineID() string {
@@ -405,6 +442,21 @@ func verifyInstall(r runner, disk string) error {
 }
 
 func run(c *config, r runner) error {
+	// Provisioning credentials take precedence over an empty config field, so
+	// secrets never have to be baked into the ISO or its JSON config.
+	if c.RegUser == "" {
+		c.RegUser = readCredential("registry-user")
+	}
+	if c.RegToken == "" {
+		c.RegToken = readCredential("registry-token")
+	}
+	if c.SSID == "" {
+		c.SSID = readCredential("wifi-ssid")
+	}
+	if c.PSK == "" {
+		c.PSK = readCredential("wifi-psk")
+	}
+
 	if err := wifiConnect(r, c.SSID, c.PSK, c.DryRun); err != nil {
 		return fmt.Errorf("wifi: %w", err)
 	}
