@@ -79,14 +79,21 @@ def git_describe(repo: str, tag_pattern: str, current: str = "", allow_major: bo
     When current is given and allow_major is false, only patch/minor bumps are
     considered, matching the "patch/minor auto-merge only" policy.
     """
-    sh(["git", "ls-remote", "--tags", "--refs", repo])
-    refs = sh(["git", "ls-remote", "--tags", "--refs", repo])
-    tags = []
+    refs = sh(["git", "ls-remote", "--tags", repo])
+    # Annotated tags have a tag-object SHA on refs/tags/<tag> and the commit
+    # SHA on refs/tags/<tag>^{}. BuildStream refs always use the commit.
+    peeled: dict[str, str] = {}
+    plain: list[tuple[str, str]] = []
     for line in refs.splitlines():
         sha, ref = line.split("\t", 1)
-        tag = ref.removeprefix("refs/tags/")
+        if ref.endswith("^{}"):
+            peeled[ref[:-3].removeprefix("refs/tags/")] = sha
+        elif ref.startswith("refs/tags/"):
+            plain.append((ref.removeprefix("refs/tags/"), sha))
+    tags = []
+    for tag, sha in plain:
         if re.fullmatch(tag_pattern, tag):
-            tags.append((tag, sha))
+            tags.append((tag, peeled.get(tag, sha)))
     if not tags:
         raise RuntimeError(f"no tags matching {tag_pattern} in {repo}")
     # Prefer the newest release tag by version, not by tag-list order.

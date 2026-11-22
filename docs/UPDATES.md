@@ -25,10 +25,17 @@ commands, so a separate workflow handles that (see below).
 
 - Downloads each Kubernetes/cri-tools/containerd/runc/CNI asset and computes
   its sha256 for both amd64 and arm64.
-- Resolves the FSDK, bootc and BuildStream-plugins git refs via `git ls-remote`
-  and emits BuildStream's `<tag>-0-g<sha>` form.
+- Resolves the FSDK and BuildStream-plugins git refs via `git ls-remote` and
+  emits BuildStream's `<tag>-0-g<sha>` form, using the **commit** SHA of a tag
+  (the peeled `refs/tags/<tag>^{}` value), not the annotated tag-object SHA.
 - Updates the `buildstream-plugins-community` PyPI sdist: bumps the version in
   the element URL and recomputes its sha256 ref from PyPI.
+- The **bootc ref is frozen** in this script: its `cargo2` source pins ~1500
+  crates from that revision's `Cargo.lock`, so a ref-only bump fails to build
+  (`rustix 1.1.6` required while `1.1.5` was pinned). Update it by dispatching
+  `.github/workflows/update-elements.yml` with `allow_bootc: true`, which runs
+  `bst source track mgmt/bootc.bst` to regenerate the ref and cargo pins
+  together; CI then rebuilds and validates the PR.
 - By default only same-major (patch/minor) git ref bumps are applied. Pass
   `--allow-major` to opt into a major bump.
 - `--check` exits 1 when pins would change (useful in CI).
