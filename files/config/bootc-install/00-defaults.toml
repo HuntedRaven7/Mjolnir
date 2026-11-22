@@ -2,8 +2,7 @@
 bootloader = "systemd"
 # systemd-repart applies repart.d definitions automatically during install;
 # the old `run-repart` key is rejected by current bootc versions.
-
-[install.filesystem.root]
-type = "btrfs"
-# ESP and xbootldr filesystems are set by bootc itself. Declaring them here
-# makes bootc install fail with "unknown field `esp`, expected `root`".
+#
+# Do not declare [install.filesystem.root] here: a custom filesystem section
+# makes bootc skip automatic GPT partition typing, and install then fails with
+# "root partition 3 has type <none>". Every caller passes --filesystem btrfs.
