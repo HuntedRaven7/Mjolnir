@@ -64,8 +64,9 @@ udevadm settle
 mkfs.vfat -F32 "${LOOP}p2" >/dev/null
 mkfs.btrfs -f "${LOOP}p3" >/dev/null
 ROOTFS="$BUILD/rootfs"
-mkdir -p "$ROOTFS/boot/efi"
+mkdir -p "$ROOTFS"
 mount "${LOOP}p3" "$ROOTFS"
+mkdir -p "$ROOTFS/boot/efi"
 mount "${LOOP}p2" "$ROOTFS/boot/efi"
 podman run --rm --privileged --pid=host \
   -v /dev:/dev \
