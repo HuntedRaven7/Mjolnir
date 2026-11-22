@@ -146,7 +146,7 @@ echo "$SENTINEL_TEST" | grep -qi 'reboot' && fail "unexpected reboot helper outp
 pass "Varlink reboot action is sentinel-based (no direct reboot)"
 
 echo "==> verifying provenance (cosign)"
-if command -v cosign >/dev/null; then
+if command -v cosign >/dev/null && [ "${SKIP_COSIGN:-0}" != "1" ]; then
   DIGEST=$(skopeo inspect --raw "docker://$IMAGE" >/dev/null 2>&1 && \
     podman inspect "$IMAGE" --format '{{.Id}}' | sed 's/^sha256://')
   COSIGN_EXPERIMENTAL=1 cosign verify \
@@ -155,7 +155,7 @@ if command -v cosign >/dev/null; then
     "$IMAGE@sha256:$DIGEST" >/dev/null || fail "cosign verification failed"
   pass "image has a valid keyless signature"
 else
-  echo "SKIP: cosign not installed on runner"
+  echo "SKIP: cosign verification (not installed or local image)"
 fi
 
 echo "==> E2E checks passed"

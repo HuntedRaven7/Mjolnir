@@ -27,10 +27,10 @@ from the runner host.
 - `multinode/` — kind-based KubeStellar WDS↔ITS propagation test (no QEMU),
   run by `.github/workflows/multinode.yml` on `testing`.
 
-`.github/workflows/e2e.yml` triggers after the `build` workflow has pushed
-`:testing` from `testing`, or on manual dispatch. It is intentionally **not** a
-required status check yet: the signed-UKI boot path is still being validated.
-The kind-based plugin and multinode tests are the currently-enforced gates.
+`.github/workflows/e2e.yml` triggers on PRs against `testing`, after the
+`build` workflow has pushed `:testing`, or on manual dispatch. On PRs it builds
+the image locally (PR builds do not publish), so it can act as a required
+status check for image changes; on pushes it tests the published image.
 
 ## Running locally
 

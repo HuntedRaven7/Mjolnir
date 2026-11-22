@@ -6,9 +6,13 @@ name: e2e
 #
 # Runs after build has pushed :testing, not on the push itself: the two
 # workflows used to start together, so e2e tried to pull an image that the
-# build had not produced yet. It is intentionally NOT a required status check
-# until it has passed reliably.
+# build had not produced yet. On PRs the image is built locally in this job so
+# the boot test can act as a required status check.
 on:
+  # PRs have no published image, so build it locally in the job below. This
+  # makes the boot test a real gate on changes to the image.
+  pull_request:
+    branches: [testing]
   workflow_run:
     workflows: [build]
     types: [completed]
@@ -35,7 +39,12 @@ jobs:
       contents: read
       packages: read
       id-token: write
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    env:
+      PODMAN: "sudo podman"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -45,6 +54,35 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: just,cosign
+
+      # PR builds do not push an image, so build and load it locally.
+      - name: Set up runner for local image build (PR only)
+        if: github.event_name == 'pull_request'
+        uses: projectbluefin/actions/bootc-build/setup-runner@v1
+        with:
+          storage-backend: btrfs
+          native-overlay: "true"
+          install-tools: '["just", "cosign", "oras"]'
+
+      - name: Normalize registry owner (PR only)
+        if: github.event_name == 'pull_request'
+        run: echo "IMAGE_OWNER=${OWNER,,}" >> "$GITHUB_ENV"
+        env:
+          OWNER: ${{ github.repository_owner }}
+
+      - name: Restore BuildStream cache (PR only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          BST_CACHE_REF: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir-cache
+          BST_CACHE_KEY: bst-${{ runner.os }}-${{ hashFiles('project.conf', 'include/versions.yml', 'elements/freedesktop-sdk.bst') }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: just cache-pull
+
+      - name: Build image locally (PR only)
+        if: github.event_name == 'pull_request'
+        run: just build
 
       # Ubuntu runners do not ship QEMU or OVMF. The sealed UKI boots through
       # systemd-boot via UEFI, so both are required.
@@ -61,10 +99,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # The published :testing package is private, so an anonymous pull gets a
-      # 403 on the bearer-token request. Log in as root: podman, skopeo and
-      # cosign then all find the credentials in the same auth file.
+      # Log in as root: podman, skopeo and cosign then all find the credentials
+      # in the same auth file. Not needed for PR builds (local image).
       - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
         env:
           REGISTRY_AUTH_FILE: /run/containers/0/auth.json
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,9 +116,14 @@ jobs:
         env:
           INPUT_IMAGE: ${{ inputs.image }}
         run: |
-          # GHCR requires a lowercase repository path; github.repository
-          # preserves the account's mixed case (HuntedRaven7/Mjolnir).
-          ref="${INPUT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY,,}:testing}"
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ref="localhost/mjolnir:latest"
+          else
+            # GHCR requires a lowercase repository path; github.repository
+            # preserves the account's mixed case (HuntedRaven7/Mjolnir).
+            ref="${INPUT_IMAGE:-ghcr.io/${GITHUB_REPOSITORY,,}:testing}"
+          fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
       - name: Run E2E checks
@@ -88,6 +131,8 @@ jobs:
           IMAGE: ${{ steps.image.outputs.ref }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           REGISTRY_AUTH_FILE: /run/containers/0/auth.json
+          # A locally built PR image has no registry signature yet.
+          SKIP_COSIGN: ${{ github.event_name == 'pull_request' && '1' || '0' }}
         # sudo -E is ignored on hosted runners; pass values explicitly instead.
         run: |
           sudo env IMAGE="${IMAGE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
