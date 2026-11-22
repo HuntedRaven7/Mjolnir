@@ -361,6 +361,7 @@ func install(c *config, disk string, r runner) error {
 	args := []string{
 		"run", "--rm", "--privileged", "--pid=host",
 		"-v", "/dev:/dev",
+		"--tmpfs", "/run/udev",
 		"-v", "/var/lib/containers:/var/lib/containers",
 		"--security-opt", "label=type:unconfined_t",
 		c.Image,

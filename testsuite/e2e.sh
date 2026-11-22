@@ -39,8 +39,11 @@ rm -f "$DISK" "$SERIAL"
 # Sparse allocation: fallocate would consume the full size on the runner's
 # limited root filesystem. bootc only writes the sectors it needs.
 truncate -s 20G "$DISK"
+# bootc reads GPT partition types from the udev database; without mounting it
+# the via-loopback install sees parttype=null and rejects the root partition.
 podman run --rm --privileged --pid=host \
   -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
+  --tmpfs /run/udev \
   -v "$BUILD:/mnt/e2e" \
   --security-opt label=type:unconfined_t \
   "$IMAGE" bootc install to-disk --composefs-backend --via-loopback /mnt/e2e/disk.raw \
