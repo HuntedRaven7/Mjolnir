@@ -79,8 +79,9 @@ This is a build-time property, not a runtime policy.
 - All orchestration logic that would normally be a shell script is a small Rust
   binary in `src/`. These helpers only exec other binaries and read credentials;
   they do not embed an interpreter.
-- Compiled utilities required by kubeadm (`cp`, `mount`, `losetup`) are kept —
-  they are native ELF binaries, not interpreters.
+- Compiled utilities required by kubeadm (`cp`, `mount`, `losetup`) and by
+  `bootc install` (`mkfs.btrfs` from FSDK's btrfs-progs, re-executed inside the
+  target image) are kept — they are native ELF binaries, not interpreters.
 - Privilege is not obtained through SUID bits: units that need it declare
   `AmbientCapabilities=` and `CapabilityBoundingSet=`.
 

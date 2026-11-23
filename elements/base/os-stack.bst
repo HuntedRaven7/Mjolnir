@@ -23,6 +23,10 @@ depends:
 - freedesktop-sdk.bst:components/util-linux-full.bst
 - freedesktop-sdk.bst:components/iproute2.bst
 - freedesktop-sdk.bst:components/procps.bst
+# bootc re-execs the filesystem-creation step inside a container from the
+# image being installed. Without mkfs.btrfs there, `bootc install --filesystem
+# btrfs` fails with "Creating rootfs: No such file or directory".
+- freedesktop-sdk.bst:components/btrfs-progs.bst
 
 # WiFi client (station mode) and firmware. NetworkManager is the daemon;
 # wpa-supplicant is the explicitly selected WiFi backend (FSDK's NM build
