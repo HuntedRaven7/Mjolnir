@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      packages: read
+      packages: write
       id-token: write
     if: >-
       (github.event_name == 'pull_request' || inputs.local_build) ||
@@ -57,7 +57,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cosign
+          tool: just,cosign,go
 
       # PR builds do not push an image, so build and load it locally.
       - name: Set up runner for local image build (PR only)
@@ -97,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 ovmf >/dev/null
+          sudo apt-get install -y -qq qemu-system-x86 ovmf mtools squashfs-tools xorriso >/dev/null
 
       - name: Enable KVM
         run: |
@@ -142,11 +142,16 @@ jobs:
           SKIP_COSIGN: ${{ (github.event_name == 'pull_request' || inputs.local_build) && '1' || '0' }}
           # A locally built image is already in podman; do not registry-pull it.
           SKIP_PULL: ${{ (github.event_name == 'pull_request' || inputs.local_build) && '1' || '0' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         # sudo -E is ignored on hosted runners; pass values explicitly instead.
         run: |
           sudo env IMAGE="${IMAGE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
             REGISTRY_AUTH_FILE="${REGISTRY_AUTH_FILE}" \
-            SKIP_PULL="${SKIP_PULL}" \
+            SKIP_PULL="${SKIP_PULL}" SKIP_COSIGN="${SKIP_COSIGN}" \
+            GH_TOKEN="${GH_TOKEN}" GITHUB_ACTOR="${GITHUB_ACTOR}" \
+            GITHUB_RUN_ID="${GITHUB_RUN_ID}" \
             ./testsuite/e2e.sh
 
       - name: Upload serial log on failure

@@ -22,7 +22,11 @@ done
 mkdir -p "$BUILD"
 LOOP=""
 INSTALL_CID=""
+INSTALL_QEMU=""
 cleanup() {
+  if [ -n "$INSTALL_QEMU" ]; then
+    kill "$INSTALL_QEMU" 2>/dev/null || true
+  fi
   if [ -f "$PIDFILE" ]; then
     kill "$(cat "$PIDFILE")" 2>/dev/null || true
     rm -f "$PIDFILE"
@@ -49,34 +53,52 @@ else
 fi
 
 echo "==> installing image to disk"
-rm -f "$DISK" "$SERIAL"
-# Sparse allocation: fallocate would consume the full size on the runner's
-# limited root filesystem. bootc only writes the sectors it needs.
-truncate -s 20G "$DISK"
-# bootc reads GPT partition types from the udev database. A loop device
-# created by --via-loopback is invisible to udev, so attach the loop on the
-# host and run udevd inside the install container: bootc then sees the same
-# udev-populated block device it would see on a real VM disk.
-LOOP=$(losetup --find --show --partscan "$DISK")
-udevadm settle
-INSTALL_CID=$(podman run -d --name mjolnir-e2e-install --privileged --pid=host \
-  -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
-  --security-opt label=type:unconfined_t \
-  "$IMAGE" /usr/lib/systemd/systemd-udevd --resolve-names=never)
-sleep 2
-podman exec "$INSTALL_CID" /usr/bin/bootc install to-disk \
-  --composefs-backend --generic-image \
-  --filesystem btrfs --wipe --bootloader systemd \
-  --karg systemd.firstboot=no --karg quiet \
-  --karg systemd.volatile=yes \
-  --karg systemd.machine_id="$(cat /proc/sys/kernel/random/uuid)" \
-  "$LOOP"
-podman rm -f "$INSTALL_CID"
-losetup -d "$LOOP"
-LOOP=""
-# No --karg: with a signed UKI, bootc rejects externally supplied kernel
-# arguments because they would not be covered by the signature. All kargs
-# (systemd.volatile=yes, console, quiet) are baked into the signed .cmdline.
+# A loop device in a container has no udev data, which bootc's DPS check
+# requires. Install inside a VM instead: the target is a real virtio disk and
+# the live installer root has a working udev daemon.
+INSTALL_IMAGE="$IMAGE"
+if [ "${SKIP_PULL:-0}" = "1" ]; then
+  TAG="e2e-${GITHUB_RUN_ID:-local}"
+  INSTALL_IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}/mjolnir:${TAG}"
+  echo "${GH_TOKEN:-}" | podman login ghcr.io -u "${GITHUB_ACTOR:-HuntedRaven7}" --password-stdin
+  podman push "$IMAGE" "docker://${INSTALL_IMAGE}"
+fi
+
+echo "==> building installer ISO for ${INSTALL_IMAGE}"
+IMAGE="$INSTALL_IMAGE" ./installer/build-iso.sh > "$BUILD/installer-iso.log" 2>&1
+INSTALL_ISO="$ROOT/dist/mjolnir-installer-amd64.iso"
+[ -f "$INSTALL_ISO" ] || fail "installer ISO was not built"
+
+# OVMF firmware: prefer the 4M build, fall back to the older layout.
+OVMF=""
+for name in OVMF_CODE_4M.fd OVMF_CODE.fd; do
+  if [ -f "/usr/share/OVMF/$name" ]; then OVMF="/usr/share/OVMF/$name"; break; fi
+done
+[ -n "$OVMF" ] || OVMF=$(find /usr/share/OVMF -maxdepth 1 -name 'OVMF_CODE*.fd' 2>/dev/null | sort | head -n1)
+[ -n "$OVMF" ] || fail "OVMF_CODE*.fd not found"
+
+rm -f "$DISK" "$BUILD/install.log"
+truncate -s 30G "$DISK"
+qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 \
+  -drive "if=pflash,format=raw,readonly=on,file=$OVMF" \
+  -cdrom "$INSTALL_ISO" \
+  -drive file="$DISK",format=raw,if=virtio \
+  -nographic -serial file:"$BUILD/install.log" -monitor none &
+INSTALL_QEMU=$!
+installed=0
+deadline=$((SECONDS + 900))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  if grep -q 'Mjolnir installed successfully' "$BUILD/install.log" 2>/dev/null; then
+    installed=1
+    break
+  fi
+  sleep 5
+done
+kill "$INSTALL_QEMU" 2>/dev/null || true
+wait "$INSTALL_QEMU" 2>/dev/null || true
+INSTALL_QEMU=""
+[ "$installed" = 1 ] || { tail -60 "$BUILD/install.log" >&2; fail "VM installer did not finish"; }
+pass "installed image to disk in VM"
 
 echo "==> booting VM via UEFI/systemd-boot (serial console: $SERIAL)"
 # Boot through the firmware so systemd-boot loads the signed UKI from the ESP.
