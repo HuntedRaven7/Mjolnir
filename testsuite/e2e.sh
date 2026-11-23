@@ -114,7 +114,7 @@ timeout 5
 EOF
 cat > "$ROOTFS/boot/efi/loader/entries/mjolnir.conf" <<EOF
 title Mjolnir Installer
-linux /EFI/Linux/$(basename "$UKI")
+efi /EFI/Linux/$(basename "$UKI")
 options ${OPTIONS}
 EOF
 
