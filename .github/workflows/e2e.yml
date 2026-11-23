@@ -144,10 +144,18 @@ jobs:
       - name: Build static installer
         run: |
           set -euo pipefail
-          go version
+          # setup-go's PATH addition does not survive the later steps of this
+          # job, so resolve the cached Go binary directly instead of relying
+          # on PATH (plain `go` fails here with "command not found").
+          GO_BIN="$(find /opt/hostedtoolcache/go -maxdepth 3 -type f \
+            -path '*/bin/go' 2>/dev/null | sort -V | tail -n1 || true)"
+          [ -n "$GO_BIN" ] || GO_BIN="$(command -v go || true)"
+          [ -n "$GO_BIN" ] || { echo "go toolchain not found" >&2; exit 1; }
+          echo "using $GO_BIN"
+          "$GO_BIN" version
           mkdir -p build/prebuilt
           (cd installer && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-            go build -trimpath -ldflags='-s -w' \
+            "$GO_BIN" build -trimpath -ldflags='-s -w' \
             -o "$GITHUB_WORKSPACE/build/prebuilt/mjolnir-install" .)
 
       - name: Run E2E checks
