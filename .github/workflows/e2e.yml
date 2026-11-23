@@ -138,9 +138,22 @@ jobs:
           fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
+      # Compile the static installer as the runner user, where setup-go's PATH
+      # is intact. The E2E script runs under sudo, whose PATH reset repeatedly
+      # hid the Go toolchain from build-iso.sh.
+      - name: Build static installer
+        run: |
+          set -euo pipefail
+          go version
+          mkdir -p build/prebuilt
+          (cd installer && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -ldflags='-s -w' \
+            -o "$GITHUB_WORKSPACE/build/prebuilt/mjolnir-install" .)
+
       - name: Run E2E checks
         env:
           IMAGE: ${{ steps.image.outputs.ref }}
+          INSTALLER_BIN: ${{ github.workspace }}/build/prebuilt/mjolnir-install
           GITHUB_REPOSITORY: ${{ github.repository }}
           REGISTRY_AUTH_FILE: /run/containers/0/auth.json
           # A locally built PR image has no registry signature yet.
@@ -157,6 +170,7 @@ jobs:
           # installer ISO build (go build) would fail with "missing tool: go".
           sudo env PATH="${PATH}" \
             IMAGE="${IMAGE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" \
+            INSTALLER_BIN="${INSTALLER_BIN}" \
             REGISTRY_AUTH_FILE="${REGISTRY_AUTH_FILE}" \
             SKIP_PULL="${SKIP_PULL}" SKIP_COSIGN="${SKIP_COSIGN}" \
             GH_TOKEN="${GH_TOKEN}" GITHUB_ACTOR="${GITHUB_ACTOR}" \

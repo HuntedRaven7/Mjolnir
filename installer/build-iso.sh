@@ -19,9 +19,17 @@ BASE="${BASE_IMAGE:-quay.io/fedora/fedora-bootc@sha256:840da31a3e3e8055a8d1c8c0f
 EFI_ARCH="$([ "$ARCH" = arm64 ] && echo aa64 || echo x64)"
 BOOT_EFI="$([ "$ARCH" = arm64 ] && echo BOOTAA64.EFI || echo BOOTX64.EFI)"
 
-for tool in go podman mformat mcopy mmd mksquashfs xorriso; do
+for tool in podman mformat mcopy mmd mksquashfs xorriso; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
+# In CI the installer is compiled by a non-root workflow step where setup-go's
+# PATH is intact; passing it through sudo is unreliable. Use that binary when
+# supplied, otherwise fall back to building here.
+if [ -n "${INSTALLER_BIN:-}" ]; then
+  [ -x "$INSTALLER_BIN" ] || { echo "INSTALLER_BIN is not executable: $INSTALLER_BIN" >&2; exit 1; }
+else
+  command -v go >/dev/null || { echo "missing tool: go" >&2; exit 1; }
+fi
 
 # Always start from a clean staging tree: podman cp fails when a destination
 # from an earlier layout (or an interrupted run) still exists, e.g. a regular
@@ -30,9 +38,14 @@ rm -rf "$BUILD"
 mkdir -p "$BUILD"/{esp/EFI/BOOT,esp/loader/entries,esp/LiveOS,squashfs/bin,squashfs/opt,squashfs/etc}
 mkdir -p "$OUT"
 
-echo "==> building static installer"
-(cd "$ROOT/installer" && GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 \
-  go build -trimpath -ldflags='-s -w' -o "$BUILD/squashfs/opt/mjolnir-install" .)
+echo "==> preparing static installer"
+mkdir -p "$BUILD/squashfs/opt"
+if [ -n "${INSTALLER_BIN:-}" ]; then
+  cp "$INSTALLER_BIN" "$BUILD/squashfs/opt/mjolnir-install"
+else
+  (cd "$ROOT/installer" && GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 \
+    go build -trimpath -ldflags='-s -w' -o "$BUILD/squashfs/opt/mjolnir-install" .)
+fi
 
 echo "==> staging live root filesystem from $BASE"
 # dracut needs a running container, so start one with an idle PID 1.
