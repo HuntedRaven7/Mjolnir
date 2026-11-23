@@ -59,7 +59,9 @@ echo "==> installing image to disk"
 INSTALL_IMAGE="$IMAGE"
 if [ "${SKIP_PULL:-0}" = "1" ]; then
   TAG="e2e-${GITHUB_RUN_ID:-local}"
-  INSTALL_IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}/mjolnir:${TAG}"
+  OWNER="${GITHUB_REPOSITORY%/*}"
+  OWNER="${OWNER,,}"
+  INSTALL_IMAGE="ghcr.io/${OWNER}/mjolnir:${TAG}"
   echo "${GH_TOKEN:-}" | podman login ghcr.io -u "${GITHUB_ACTOR:-HuntedRaven7}" --password-stdin
   podman push "$IMAGE" "docker://${INSTALL_IMAGE}"
 fi
