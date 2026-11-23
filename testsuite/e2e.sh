@@ -105,6 +105,13 @@ echo "==> installed root diagnostics"
 find "$ROOTFS" -name systemd -type f 2>/dev/null | head -5 || true
 find "$ROOTFS" -maxdepth 4 -type d -name deploy 2>/dev/null | head -5 || true
 find "$ROOTFS/boot" -name '*.efi' 2>/dev/null | head -10 || true
+echo "==> BLS entries"
+find "$ROOTFS/boot/loader/entries" -type f 2>/dev/null | head -5 || true
+for f in "$ROOTFS"/boot/loader/entries/*.conf; do
+  [ -f "$f" ] || continue
+  echo "--- $f"
+  cat "$f"
+done
 
 umount "$ROOTFS/boot/efi" "$ROOTFS" || true
 losetup -d "$LOOP"
