@@ -38,6 +38,7 @@ type config struct {
 	Reboot     bool   `json:"reboot"`
 	Filesystem string `json:"filesystem"`
 	Encrypted  bool   `json:"encrypted"`
+	Headless   bool   `json:"headless"`
 	Yes        bool   `json:"-"`
 }
 
@@ -169,6 +170,8 @@ func disks(r runner) ([]diskInfo, error) {
 
 var sizeRe = regexp.MustCompile(`^([0-9]+(?:\.[0-9]+)?)([KMGTPE])$`)
 
+var hex64 = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
+
 func diskSizeBytes(size string) (float64, bool) {
 	m := sizeRe.FindStringSubmatch(strings.TrimSpace(size))
 	if m == nil {
@@ -262,7 +265,7 @@ func wifiConnect(r runner, ssid, psk string, dry bool) error {
 	if ssid == "" || psk == "" {
 		return nil
 	}
-	if len(psk) != 64 || !regexp.MustCompile(`^[0-9a-fA-F]{64}$`).MatchString(psk) {
+	if len(psk) != 64 || !hex64.MatchString(psk) {
 		return errors.New("wifi-psk must be a 64 character hex string")
 	}
 	if dry {
@@ -563,6 +566,7 @@ func main() {
 	configPath := flag.String("config", "", "JSON config file (skips interactive prompts for values it sets)")
 	dryRun := flag.Bool("dry-run", false, "print commands without executing them")
 	yes := flag.Bool("yes", false, "unattended: no prompts, pick the first eligible disk if none is configured")
+	headless := flag.Bool("headless", false, "run without the TUI (requires values from --config or credentials)")
 	encrypt := flag.Bool("encrypt", false, "bind the root filesystem to TPM2 with LUKS")
 	version := flag.Bool("version", false, "print version")
 	flag.Parse()
@@ -581,6 +585,9 @@ func main() {
 		c.DryRun = true
 	}
 	c.Yes = *yes
+	if *headless {
+		c.Headless = true
+	}
 	if *encrypt {
 		c.Encrypted = true
 	}
@@ -590,33 +597,22 @@ func main() {
 		r = dryRunner{real: r}
 	}
 
-	in := bufio.NewReader(os.Stdin)
-	if c.Yes {
-		if c.Disk == "" {
-			fmt.Println("Unattended install: no disk configured; the first eligible disk will be used")
-		}
-	} else {
-		if c.Image == "" || *configPath == "" {
-			c.Image = prompt(in, "Image reference", c.Image)
-		}
-		if c.SSID == "" && *configPath == "" {
-			if strings.EqualFold(prompt(in, "Configure WiFi?", "n"), "y") {
-				c.SSID = prompt(in, "WiFi SSID", "")
-				c.PSK = prompt(in, "WPA PSK (64 hex chars)", "")
+	// The TUI is the default for a human at a console. Automation (the e2e
+	// harness, provisioning) sets headless in its config or passes --yes.
+	if !c.Headless && !c.Yes && !c.DryRun {
+		if terminalAvailable() {
+			if err := collectConfig(c, r); err != nil {
+				fmt.Fprintln(os.Stderr, "installer configuration failed:", err)
+				os.Exit(1)
 			}
+		} else {
+			// Nothing to render a TUI to: fall back to unattended defaults.
+			fmt.Println("No terminal detected; running unattended")
+			c.Yes = true
 		}
-		if c.RegUser == "" && *configPath == "" {
-			if strings.EqualFold(prompt(in, "Private registry?", "n"), "y") {
-				c.RegUser = prompt(in, "Registry user", "")
-				c.RegToken = prompt(in, "Registry token", "")
-			}
-		}
-		if c.Role == "" && *configPath == "" {
-			c.Role = prompt(in, "Node role (control-plane/worker)", "worker")
-		}
-		if !c.Encrypted && strings.EqualFold(prompt(in, "Encrypt root with TPM2 (LUKS)?", "n"), "y") {
-			c.Encrypted = true
-		}
+	}
+	if c.Yes && c.Disk == "" {
+		fmt.Println("Unattended install: no disk configured; the first eligible disk will be used")
 	}
 
 	if err := run(c, r); err != nil {

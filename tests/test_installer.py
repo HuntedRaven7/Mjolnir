@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,20 @@ binary = Path(tempfile.gettempdir()) / "mjolnir-installer-test"
 
 
 def main() -> int:
+    # Keep the Go module versions in sync with the canonical pins. go.sum holds
+    # the exact module checksums; versions.yml owns the version facts.
+    versions_text = (ROOT / "include/versions.yml").read_text()
+    gomod_text = (ROOT / "installer/go.mod").read_text()
+    for key, module in (
+        ("installer-tui-bubbletea-ref", "github.com/charmbracelet/bubbletea"),
+        ("installer-tui-huh-ref", "github.com/charmbracelet/huh"),
+        ("installer-tui-lipgloss-ref", "github.com/charmbracelet/lipgloss"),
+    ):
+        m = re.search(rf'^\s*{key}:\s*"([^"]+)"', versions_text, re.MULTILINE)
+        if not m or f"{module} {m.group(1)}" not in gomod_text:
+            print(f"{key} does not match installer/go.mod", file=sys.stderr)
+            return 1
+
     # Go is not present on every build host (CI installs it explicitly).
     # Skip the installer build smoke-test rather than failing `just test` when
     # the toolchain is absent; the ISO workflow exercises it where it matters.
