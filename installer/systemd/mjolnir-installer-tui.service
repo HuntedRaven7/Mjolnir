@@ -1,0 +1,20 @@
+[Unit]
+Description=Mjolnir installer (interactive TUI)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/mjolnir-install --config /etc/mjolnir-installer.json
+# Bubble Tea needs a real terminal for raw mode and the alternate screen.
+# /dev/console follows the last console= argument, so this works on both the
+# VGA console and the serial console used by CI. Errors still reach the journal.
+StandardInput=tty
+TTYPath=/dev/console
+StandardOutput=tty
+StandardError=journal+console
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

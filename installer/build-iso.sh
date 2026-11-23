@@ -81,10 +81,17 @@ rm -rf "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/man" \
 # The base image enables sshd; it has no place in the installer live root.
 find "$ROOTFS/usr/lib/systemd/system" -name 'sshd*' -delete
 
+if [ "${HEADLESS:-0}" = "1" ]; then
+  # Automated installs: no TTY, no prompts, no TUI.
+  SERVICE_SRC="$ROOT/installer/systemd/mjolnir-installer.service"
+else
+  # Human boots go straight into the full-screen TUI on the console.
+  SERVICE_SRC="$ROOT/installer/systemd/mjolnir-installer-tui.service"
+fi
 cat > "$ROOTFS/etc/mjolnir-installer.json" <<EOF
 {"image":"$IMAGE","filesystem":"btrfs"}
 EOF
-install -Dm644 "$ROOT/installer/systemd/mjolnir-installer.service" \
+install -Dm644 "$SERVICE_SRC" \
   "$ROOTFS/usr/lib/systemd/system/mjolnir-installer.service"
 mkdir -p "$ROOTFS/usr/lib/systemd/system/multi-user.target.wants"
 ln -sf ../mjolnir-installer.service \

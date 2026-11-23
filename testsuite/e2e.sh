@@ -73,12 +73,13 @@ fi
 echo "==> building installer ISO for ${INSTALL_IMAGE}"
 # Fedora's bootc tags are mutable and old digests are quickly garbage-collected
 # from Quay. Resolve the release tag to its current digest at run time, then
-# pass an immutable ref to the ISO builder.
+# pass an immutable ref to the ISO builder. HEADLESS=1 selects the tty-free
+# service so CI automation never enters the TUI.
 INSTALLER_BASE_DIGEST=$(skopeo inspect docker://quay.io/fedora/fedora-bootc:45 \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["Digest"])')
 INSTALLER_BASE="quay.io/fedora/fedora-bootc@${INSTALLER_BASE_DIGEST}"
 echo "==> installer base: $INSTALLER_BASE"
-if ! IMAGE="$INSTALL_IMAGE" BASE_IMAGE="$INSTALLER_BASE" \
+if ! IMAGE="$INSTALL_IMAGE" BASE_IMAGE="$INSTALLER_BASE" HEADLESS=1 \
     ./installer/build-iso.sh > "$BUILD/installer-iso.log" 2>&1; then
   tail -80 "$BUILD/installer-iso.log" >&2
   fail "installer ISO build failed"

@@ -3,10 +3,10 @@
 A small static Go binary plus a minimal UEFI live ISO that installs Mjolnir
 from a registry onto a local disk. It is adapted from the architecture of
 [projectbluefin/knuckle](https://github.com/projectbluefin/knuckle)
-(Apache-2.0): argv-only command execution through a runner, a headless JSON
-config, and a squashfs-in-initrd live image assembled with xorriso. Unlike
-knuckle, it does not use a TUI library and it installs a bootc OCI image
-directly with `bootc install to-disk`.
+(Apache-2.0): argv-only command execution through a runner, a Bubble Tea/Huh
+TUI with a headless JSON fallback, and a squashfs-in-initrd live image assembled
+with xorriso. Unlike knuckle, it installs a bootc OCI image directly with
+`bootc install to-disk`.
 
 ## Build
 
@@ -21,26 +21,32 @@ Output: `dist/mjolnir-installer-amd64.iso` (set `ARCH=arm64` for aarch64).
 
 ## Interactive use
 
-Boot the ISO. `mjolnir-installer.service` starts the installer and logs to both
-the journal and the console. It prompts for:
+Boot the ISO. `mjolnir-installer.service` attaches stdin to the console and
+starts a full-screen Bubble Tea / Huh TUI. It asks for:
 
 - image reference (default `ghcr.io/huntedraven7/mjolnir:stable`)
-- WiFi SSID and WPA PSK (optional; writes a NetworkManager keyfile)
-- private registry user/token (optional; piped to `podman login`)
-- node role (`control-plane` or `worker`)
-- target disk (selected from `lsblk`)
+- node role (`control-plane` or `worker`), hostname and timezone
+- root filesystem (`btrfs`, `ext4` or `xfs`) and optional TPM2/LUKS encryption
+- optional WiFi SSID and WPA PSK (writes a NetworkManager keyfile)
+- optional private registry user/token (piped to `podman login`)
+- target disk, selected from `lsblk`, with a typed confirmation
 
 Removable media, mounted disks and the disk named on the kernel command line
-are never offered. The interactive flow requires you to **type the exact disk
-path** before anything is erased, and disks smaller than 20 GB are rejected.
+are never offered. Disks smaller than 20 GB are rejected. On a serial console
+the installer sets an 80x40 geometry first, because serial TTYs do not
+negotiate a window size.
 
-After the install it verifies that the target has a vfat ESP containing
-systemd-boot and a signed UKI, plus a btrfs root, before reporting success.
-Wired networking and DHCP are handled by NetworkManager in the live image.
+After the form is submitted the TUI exits and the install log streams to the
+console. It verifies that the target has a vfat ESP containing systemd-boot and
+a signed UKI, plus the chosen root filesystem, before reporting success.
 
 ## Headless use
 
-Pass `--config <file>` to skip prompts for values set in the JSON:
+Automation sets `"headless": true` in the installer config (or passes
+`--headless`/`--yes`). `HEADLESS=1 ./installer/build-iso.sh` writes that flag
+into the ISO config; the e2e harness does this. No TTY is then required.
+
+Pass `--config <file>` to set values without the TUI:
 
 ```json
 {
@@ -53,14 +59,13 @@ Pass `--config <file>` to skip prompts for values set in the JSON:
   "registryUser": "",
   "registryToken": "",
   "filesystem": "btrfs",
-  "encrypted": false
+  "encrypted": false,
+  "headless": true
 }
 ```
 
-`--yes` disables all prompts and selects the configured disk — or the first
-eligible disk if none is configured. The service in the ISO uses this flag
-because it has no tty; an interactive terminal should omit it to get the disk
-confirmation prompt. Set `"encrypted": true` (or pass `--encrypt`) for a
+`--yes` selects the configured disk — or the first eligible disk if none is
+configured — without a TUI. Set `"encrypted": true` (or pass `--encrypt`) for a
 TPM2-bound LUKS root (`bootc install --block-setup tpm2-luks`); the machine must
 have a TPM2 device. `--dry-run` prints the commands without executing them;
 `--version` prints the installer version.
