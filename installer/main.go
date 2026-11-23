@@ -333,6 +333,18 @@ func install(c *config, disk string, r runner) error {
 	if err := r.run("wipefs", "--all", "--force", disk); err != nil {
 		return fmt.Errorf("wipe %s: %w", disk, err)
 	}
+	// wipefs on the whole disk does not clear signatures inside its partitions.
+	// A failed earlier attempt can leave a btrfs root behind; sfdisk then keeps
+	// that signature and mkfs.btrfs refuses to overwrite it without -f, so every
+	// retry fails before reaching the real problem. Clear those signatures now.
+	if parts, err := r.output("lsblk", "-lnp", "-o", "NAME", disk); err == nil {
+		for _, part := range strings.Fields(parts) {
+			if part == disk {
+				continue
+			}
+			_ = r.run("wipefs", "--all", "--force", part)
+		}
+	}
 
 	// The live root's overlay is tmpfs-backed, so pulling a multi-GB image can
 	// exhaust RAM on modest VMs. Use the target disk as temporary swap for the
