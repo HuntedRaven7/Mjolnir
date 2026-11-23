@@ -57,7 +57,7 @@ truncate -s 20G "$DISK"
 # created by --via-loopback is invisible to udev, so attach the loop on the
 # host and run udevd inside the install container: bootc then sees the same
 # udev-populated block device it would see on a real VM disk.
-LOOP=$(losetup --find --show "$DISK")
+LOOP=$(losetup --find --show --partscan "$DISK")
 udevadm settle
 INSTALL_CID=$(podman run -d --name mjolnir-e2e-install --privileged --pid=host \
   -v /dev:/dev -v /var/lib/containers:/var/lib/containers \
