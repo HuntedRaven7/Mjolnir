@@ -41,6 +41,22 @@ def main() -> int:
     for key in ("HandleLidSwitch", "HandleLidSwitchExternalPower", "HandleLidSwitchDocked"):
         if not re.search(rf"^{key}\s*=\s*ignore\s*$", logind_text, re.MULTILINE):
             errors.append(f"{logind.relative_to(ROOT)}: {key} is not set to ignore")
+    # The installer ISO base must be an immutable, centrally pinned image.
+    versions_text = (ROOT / "include/versions.yml").read_text()
+    base = re.search(r'^\s*installer-base-image:\s*"([^"]*)"', versions_text, re.MULTILINE)
+    if not base or "@sha256:" not in base.group(1):
+        errors.append("include/versions.yml: installer-base-image is not sha256-pinned")
+    else:
+        iso_script = (ROOT / "installer/build-iso.sh").read_text()
+        if "installer-base-image" not in iso_script:
+            errors.append("installer/build-iso.sh: does not read the installer-base-image pin")
+        if any(
+            re.search(r'fedora-bootc:[0-9]', line)
+            for line in iso_script.splitlines()
+            if not line.lstrip().startswith("#")
+        ):
+            errors.append("installer/build-iso.sh: mutable fedora-bootc tag")
+
     if errors:
         print("Static configuration checks FAILED:", file=__import__("sys").stderr)
         for e in errors:

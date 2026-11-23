@@ -10,6 +10,9 @@ variables:
   # Installer ISO host tooling (not part of the bootc image). The dracut live
   # modules in installer/dracut-modules were extracted from this pinned RPM.
   dracut-live-rpm-sha256: "df1407afb9161b14f8e526c4a386f9061067f4f5f63bb05e578281ca9280d997"
+  # Live-root base for the installer ISO. This is the digest resolved from the
+  # fedora-bootc:45 release tag on 2026-11-23; pinned so builds stay immutable.
+  installer-base-image: "quay.io/fedora/fedora-bootc@sha256:f0cdc050f149f554ab84d3cc88e80583096e195ddb083f9670c3015e48e86b7a"
 
   # -------------------------------------------------------------------------
   # Kubernetes (upstream kubeadm; no k0s)

@@ -14,8 +14,16 @@ OUT="$ROOT/dist"
 ARCH="${ARCH:-amd64}"
 IMAGE="${IMAGE:-ghcr.io/huntedraven7/mjolnir:stable}"
 # The plain fedora container is too minimal: it has no kernel, systemd, podman,
-# skopeo, bootc, ip or nmcli. The bootc image ships all of them; pin by digest.
-BASE="${BASE_IMAGE:-quay.io/fedora/fedora-bootc@sha256:840da31a3e3e8055a8d1c8c0f378e66e5c7de6ebe39037bbf7e5b252f138f04d}"
+# skopeo, bootc, ip or nmcli. The bootc image ships all of them. The digest is
+# canonical in include/versions.yml (resolved from the fedora-bootc:45 release
+# tag); never use a mutable tag here.
+if [ -n "${BASE_IMAGE:-}" ]; then
+  BASE="$BASE_IMAGE"
+else
+  BASE=$(sed -n 's/^[[:space:]]*installer-base-image:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    "$ROOT/include/versions.yml")
+  [ -n "$BASE" ] || { echo "installer-base-image pin missing from include/versions.yml" >&2; exit 1; }
+fi
 EFI_ARCH="$([ "$ARCH" = arm64 ] && echo aa64 || echo x64)"
 BOOT_EFI="$([ "$ARCH" = arm64 ] && echo BOOTAA64.EFI || echo BOOTX64.EFI)"
 
