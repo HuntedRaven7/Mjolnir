@@ -67,7 +67,10 @@ if [ "${SKIP_PULL:-0}" = "1" ]; then
 fi
 
 echo "==> building installer ISO for ${INSTALL_IMAGE}"
-IMAGE="$INSTALL_IMAGE" ./installer/build-iso.sh > "$BUILD/installer-iso.log" 2>&1
+if ! IMAGE="$INSTALL_IMAGE" ./installer/build-iso.sh > "$BUILD/installer-iso.log" 2>&1; then
+  tail -80 "$BUILD/installer-iso.log" >&2
+  fail "installer ISO build failed"
+fi
 INSTALL_ISO="$ROOT/dist/mjolnir-installer-amd64.iso"
 [ -f "$INSTALL_ISO" ] || fail "installer ISO was not built"
 
