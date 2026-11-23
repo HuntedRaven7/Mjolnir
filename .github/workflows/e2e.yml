@@ -57,7 +57,12 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cosign,go
+          tool: just,cosign
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.24'
+          cache: false
 
       # PR builds do not push an image, so build and load it locally.
       - name: Set up runner for local image build (PR only)
