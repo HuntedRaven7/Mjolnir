@@ -103,6 +103,12 @@ for module in 90dmsquash-live 99img-lib; do
 done
 KVER=$(podman exec "$CID" bash -c 'ls /usr/lib/modules | head -n1')
 [ -n "$KVER" ] || { echo "no kernel version in BASE_IMAGE=$BASE" >&2; exit 1; }
+# OSTree makes /root a symlink to var/roothome. dracut's create_directories
+# tries to recreate that symlink in the initramfs staging tree, where the
+# target does not exist, and reports a harmless error. The live root was
+# already exported above, so normalising /root in this throwaway container
+# only affects initramfs generation.
+podman exec "$CID" bash -c 'if [ -L /root ]; then rm -f /root && mkdir /root; fi'
 # --no-hostonly is required: dmsquash-live refuses to run in host-only mode.
 # isofs is needed to read the ISO once the firmware hands over to the kernel.
 podman exec "$CID" bash -c \
@@ -113,7 +119,7 @@ podman cp "$CID:/usr/lib/modules/$KVER/vmlinuz" "$BUILD/esp/vmlinuz"
 
 echo "==> assembling ESP"
 BOOT_SOURCE="${SYSTEMD_BOOT_EFI:-/usr/lib/systemd/boot/efi/systemd-boot${EFI_ARCH}.efi}"
-[ -f "$BOOT_SOURCE" ] || { echo "missing $BOOT_SOURCE" >&2; exit 1; }
+[ -f "$BOOT_SOURCE" ] || { echo "missing $BOOT_SOURCE (install systemd-boot-efi on the host)" >&2; exit 1; }
 cp "$BOOT_SOURCE" "$BUILD/esp/EFI/BOOT/$BOOT_EFI"
 
 cat > "$BUILD/esp/loader/loader.conf" <<'EOF'
