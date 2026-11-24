@@ -78,6 +78,16 @@ spec:
                     # bootc composefs digest (v1-sha512-12:<128 hex>), not a
                     # dm-verity root hash; kept name for compatibility.
                     usrVerityRootHash: { type: string }
+                reset:
+                  type: object
+                  properties:
+                    scope: { type: string, enum: [node-identity, etcd-data, full] }
+                    ready: { type: boolean }
+                    detail: { type: string }
+                    snapshot:
+                      type: object
+                      properties:
+                        lastSuccessful: { type: string, format: date-time }
                 wifi:
                   type: object
                   properties:

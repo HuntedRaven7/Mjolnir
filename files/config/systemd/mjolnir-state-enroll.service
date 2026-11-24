@@ -1,0 +1,27 @@
+[Unit]
+Description=Enroll MjolnirState to the signed PCR 11 TPM2 policy
+Documentation=man:systemd-cryptenroll(1)
+DefaultDependencies=no
+After=var-lib-mjolnir.mount
+RequiresMountsFor=/var/lib/mjolnir
+ConditionPathExists=!/var/lib/mjolnir/.tpm2-enrolled
+ConditionPathExists=/run/systemd/tpm2-pcr-signature.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The empty LUKS slot from systemd-repart is replaced by a TPM2 slot bound to
+# PCR 7 (Secure Boot state) and a signed PCR 11 policy. The public key and
+# signature are the public artifacts embedded in the signed UKI and exposed by
+# systemd-stub at /run/systemd/. No key material is ever read from the repo.
+ExecStart=/usr/bin/systemd-cryptenroll --unlock-empty --wipe-slot=empty --tpm2-device=auto --tpm2-pcrs=7 --tpm2-public-key=/run/systemd/tpm2-pcr-public-key.pem --tpm2-public-key-pcrs=11 /dev/disk/by-partlabel/MjolnirState
+ExecStart=/usr/bin/touch /var/lib/mjolnir/.tpm2-enrolled
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/
+ReadWritePaths=/var/lib/mjolnir /run/systemd
+
+[Install]
+WantedBy=local-fs.target

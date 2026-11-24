@@ -8,12 +8,17 @@ build-depends:
 - base/sandbox-tools.bst
 - freedesktop-sdk.bst:components/fakecap.bst
 - freedesktop-sdk.bst:components/dracut.bst
+- freedesktop-sdk.bst:components/cryptsetup.bst
+- freedesktop-sdk.bst:components/tpm2-tss.bst
 - freedesktop-sdk.bst:components/linux.bst
 - freedesktop-sdk.bst:components/linux-firmware.bst
 - freedesktop-sdk.bst:components/systemd.bst
 - freedesktop-sdk.bst:components/kmod.bst
 - freedesktop-sdk.bst:components/cpio.bst
 - freedesktop-sdk.bst:components/zstd.bst
+- filename: config/files-src.bst
+  config:
+    location: /config
 
 environment:
   LD_PRELOAD: /usr/libexec/fakecap/fakecap.so
@@ -31,6 +36,13 @@ config:
     test -n "${version}"
     test -f "/usr/lib/modules/${version}/vmlinuz"
     echo "Kernel version: ${version}"
+    # TPM2-backed LUKS needs cryptsetup, its systemd token plugin and tpm2-tss
+    # in the initramfs. Under systemd.volatile=yes /etc/crypttab is tmpfs at
+    # runtime, so the build-time copy below is what early boot reads.
+    test -f /usr/lib/cryptsetup/libcryptsetup-token-systemd-tpm2.so
+    install -Dm644 /config/crypttab /etc/crypttab
+    install -Dm644 /config/dracut/50-mjolnir-tpm2.conf \
+      /etc/dracut.conf.d/50-mjolnir-tpm2.conf
     # dracut requires modules.dep in the sandbox root /usr/lib/modules.
     depmod -a "${version}"
     mkdir -p "%{install-root}/usr/lib/modules"

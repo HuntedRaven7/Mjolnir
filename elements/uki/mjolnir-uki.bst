@@ -63,7 +63,20 @@ config:
       --uname "${kver}" \
       --signtool=systemd-sbsign --no-sign-kernel \
       --secureboot-private-key="${WORK}/keys/VENDOR.key" \
-      --secureboot-certificate="${WORK}/keys/VENDOR.crt"
+      --secureboot-certificate="${WORK}/keys/VENDOR.crt" \
+      --pcr-private-key="${WORK}/keys/PCR.key" \
+      --pcr-public-key="${WORK}/keys/PCR.pub" \
+      --pcr-banks=sha256
+
+    # systemd-measure signs the expected PCR 11 value offline; no TPM is needed
+    # in the build sandbox. ukify embeds the signature (.pcrsig) and its public
+    # key (.pcrpkey) in the signed UKI. systemd-stub exposes them to the initrd,
+    # which lets a signed UKI update still unseal MjolnirState.
+    test -x /usr/lib/systemd/systemd-measure
+    objcopy -O binary -j .pcrsig "$WORK/mjolnir.efi" "$WORK/pcrsig.json"
+    objcopy -O binary -j .pcrpkey "$WORK/mjolnir.efi" "$WORK/pcrpkey.pem"
+    cmp "$WORK/pcrpkey.pem" "${WORK}/keys/PCR.pub"
+    grep -q '"sig"' "$WORK/pcrsig.json"
 
     # Assert the signature and that the digest was baked into the cmdline.
     sbverify --cert "${WORK}/keys/VENDOR.crt" "$WORK/mjolnir.efi"
@@ -72,6 +85,15 @@ config:
     grep -q 'systemd.volatile=yes' "$WORK/cmdline.txt"
     grep -q 'console=ttyS0,115200' "$WORK/cmdline.txt"
     grep -q 'systemd.journald.forward_to_console=1' "$WORK/cmdline.txt"
+
+    # Publish the public PCR artifacts in this signing-only artifact. They are
+    # also embedded in the signed UKI (and exposed to the initrd by systemd-stub),
+    # so they are deliberately not copied into the digest-pinned runtime tree.
+    # PCR.key never leaves the signing-only artifacts.
+    install -Dm644 "${WORK}/keys/PCR.pub" \
+      "%{install-root}/usr/lib/systemd/tpm2-pcr-public-key.pem"
+    install -Dm644 "$WORK/pcrsig.json" \
+      "%{install-root}/usr/share/mjolnir/tpm2-pcr-signature.json"
     install -Dm644 "$WORK/mjolnir.efi" \
       "%{install-root}/boot/EFI/Linux/mjolnir-${kver}.efi"
 

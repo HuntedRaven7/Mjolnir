@@ -42,6 +42,8 @@ def main() -> int:
                     help="journal export socket address (journal.forward_to_socket)")
     ap.add_argument("--registry-user")
     ap.add_argument("--registry-token")
+    ap.add_argument("--snapshot-url", help="https destination for etcd snapshots")
+    ap.add_argument("--snapshot-token", help="bearer token for the snapshot destination")
     args = ap.parse_args()
 
     errors: list[str] = []
@@ -67,6 +69,10 @@ def main() -> int:
         errors.append("--registry-token is required with --registry-user")
     if args.registry_token and not args.registry_user:
         errors.append("--registry-user is required with --registry-token")
+    if args.snapshot_url and not args.snapshot_url.startswith("https://"):
+        errors.append("--snapshot-url must be an https URL")
+    if args.snapshot_token and not args.snapshot_url:
+        errors.append("--snapshot-token is required with --snapshot-url")
     if errors:
         for error in errors:
             print(f"error: {error}", file=sys.stderr)
@@ -87,6 +93,8 @@ def main() -> int:
     write_secret(args.out, "journal.forward_to_socket", args.journal_forward_socket)
     write_secret(args.out, "registry-user", args.registry_user)
     write_secret(args.out, "registry-token", args.registry_token)
+    write_secret(args.out, "etcd-snapshot-url", args.snapshot_url)
+    write_secret(args.out, "etcd-snapshot-token", args.snapshot_token)
     if args.tls_ca:
         (args.out / "varlink-httpd.tls.trust").write_bytes(args.tls_ca.read_bytes())
         (args.out / "varlink-httpd.tls.trust").chmod(stat.S_IRUSR)

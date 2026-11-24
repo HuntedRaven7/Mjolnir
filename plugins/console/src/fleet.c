@@ -539,6 +539,59 @@ static json_object *diag_command(const char *const argv[], int as_json) {
     return o;
 }
 
+// Reset scope is validated here, at the Varlink boundary. Only a whitelisted
+// value becomes a unit name, so caller input never reaches sd-bus as a path.
+static const char *const RESET_SCOPES[] = {
+    "node-identity", "etcd-data", "full"
+};
+static const char *const RESET_UNITS[] = {
+    "mjolnir-reset-node-identity.service",
+    "mjolnir-reset-etcd-data.service",
+    "mjolnir-reset-full.service"
+};
+
+static int reset_scope_index(const char *scope) {
+    if (!scope) return -1;
+    for (size_t i = 0; i < sizeof(RESET_SCOPES) / sizeof(RESET_SCOPES[0]); i++)
+        if (!strcmp(scope, RESET_SCOPES[i])) return (int)i;
+    return -1;
+}
+
+static json_object *varlink_error(const char *name) {
+    json_object *e = json_object_new_object();
+    json_object_object_add(e, "error", json_object_new_string(name));
+    return e;
+}
+
+static void trim_newline_fleet(char *s) {
+    size_t n = strlen(s);
+    while (n && (s[n-1] == '\n' || s[n-1] == '\r' || s[n-1] == ' '))
+        s[--n] = '\0';
+}
+
+// Start a unit directly over sd-bus; no shell and no string interpolation.
+static int start_unit(const char *unit) {
+    sd_bus *bus = NULL;
+    sd_bus_error err = SD_BUS_ERROR_NULL;
+    sd_bus_message *msg = NULL, *reply = NULL;
+    int r = sd_bus_default_system(&bus);
+    if (r >= 0)
+        r = sd_bus_message_new_method_call(bus, &msg,
+            "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager", "StartUnit");
+    if (r >= 0) r = sd_bus_message_append(msg, "ss", unit, "replace");
+    if (r >= 0) r = sd_bus_call(bus, msg, 0, &err, &reply);
+    if (r < 0)
+        fprintf(stderr, "mjolnir-fleet: StartUnit %s failed: %s\n",
+                unit, err.message ? err.message : strerror(-r));
+    sd_bus_error_free(&err);
+    if (msg) sd_bus_message_unref(msg);
+    if (reply) sd_bus_message_unref(reply);
+    if (bus) sd_bus_unref(bus);
+    return r < 0 ? -1 : 0;
+}
+}
+
 static json_object *dispatch(json_object *req) {
     json_object *params = NULL;
     const char *method = jstr(req, "method");
@@ -565,6 +618,8 @@ static json_object *dispatch(json_object *req) {
             "io.mjolnir.Fleet.KubeadmPreflight",
             "io.mjolnir.Fleet.NetworkChecks",
             "io.mjolnir.Fleet.FactoryReset",
+            "io.mjolnir.Fleet.ResetPreflight",
+            "io.mjolnir.Fleet.SnapshotNow",
             "io.mjolnir.Fleet.Upgrade",
             "io.mjolnir.Fleet.ClearRebootLock",
             "io.mjolnir.Fleet.Reboot",
@@ -688,38 +743,43 @@ static json_object *dispatch(json_object *req) {
         return o;
     }
     if (!strcmp(method, "io.mjolnir.Fleet.FactoryReset")) {
-        // Explicit confirmation is mandatory: a stray call must never wipe a node.
+        // Scope + exact confirmation string + a TPM-sealed credential are all
+        // required. A stray call can never wipe a node.
+        const char *scope = jstr(params, "scope");
         const char *confirm = jstr(params, "confirm");
-        if (!confirm || strcmp(confirm, "factory-reset")) {
-            json_object *e = json_object_new_object();
-            json_object_object_add(e, "error", json_object_new_string("ConfirmationRequired"));
-            return e;
-        }
-        if (access("/sys/firmware/efi", F_OK) != 0) {
-            json_object *e = json_object_new_object();
-            json_object_object_add(e, "error", json_object_new_string("Unsupported"));
-            return e;
-        }
-        sd_bus *bus = NULL;
-        sd_bus_error err = SD_BUS_ERROR_NULL;
-        sd_bus_message *msg = NULL, *reply = NULL;
-        int r = sd_bus_default_system(&bus);
-        if (r >= 0)
-            r = sd_bus_message_new_method_call(bus, &msg,
-                "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
-                "org.freedesktop.systemd1.Manager", "StartUnit");
-        if (r >= 0) r = sd_bus_message_append(msg, "ss", "mjolnir-factory-reset.target", "replace");
-        if (r >= 0) r = sd_bus_call(bus, msg, 0, &err, &reply);
-        if (r < 0) {
-            fprintf(stderr, "mjolnir-fleet: factory reset StartUnit failed: %s\n",
-                    err.message ? err.message : strerror(-r));
-        }
-        sd_bus_error_free(&err);
-        if (msg) sd_bus_message_unref(msg);
-        if (reply) sd_bus_message_unref(reply);
-        if (bus) sd_bus_unref(bus);
-        return action_result("factory-reset",
-                             r < 0 ? "request failed" : "requested for next boot; node will reboot");
+        int idx = reset_scope_index(scope);
+        if (idx < 0) return varlink_error("InvalidScope");
+        char expected[64];
+        snprintf(expected, sizeof(expected), "factory-reset:%s", scope);
+        if (!confirm || strcmp(confirm, expected))
+            return varlink_error("ConfirmationRequired");
+        if (access("/sys/firmware/efi", F_OK) != 0)
+            return varlink_error("Unsupported");
+        int r = start_unit(RESET_UNITS[idx]);
+        return action_result("factory-reset", r < 0 ? "request failed" :
+                             "requested; the helper drains the node before wiping");
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.ResetPreflight")) {
+        const char *scope = jstr(params, "scope");
+        int idx = reset_scope_index(scope);
+        if (idx < 0) return varlink_error("InvalidScope");
+        char out[4096];
+        const char *argv[] = {
+            "/usr/bin/mjolnir-helper", "reset-preflight", scope, NULL
+        };
+        int rc = run_capture(argv, out, sizeof(out));
+        trim_newline_fleet(out);
+        json_object *o = json_object_new_object();
+        json_object_object_add(o, "scope", json_object_new_string(scope));
+        json_object_object_add(o, "ready",
+            json_object_new_boolean(rc == 0 && !strncmp(out, "READY:", 6)));
+        json_object_object_add(o, "detail", json_object_new_string(out));
+        return o;
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.SnapshotNow")) {
+        int r = start_unit("mjolnir-etcd-snapshot.service");
+        return action_result("snapshot-now", r < 0 ? "request failed" :
+                             "snapshot requested; destination comes from credentials");
     }
     if (!strcmp(method, "io.mjolnir.Fleet.WifiStatus")) {
         json_object *all = build_status();

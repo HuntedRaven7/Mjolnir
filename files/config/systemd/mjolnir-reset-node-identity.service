@@ -1,0 +1,19 @@
+[Unit]
+Description=Mjolnir factory reset: node identity only
+Documentation=man:systemd-cryptenroll(1)
+Wants=network-online.target
+After=network-online.target var-lib-mjolnir.mount
+
+[Service]
+Type=oneshot
+# Both credentials are TPM2-sealed to the signed PCR policy at provisioning.
+# Without them the helper exits before removing anything.
+LoadCredentialEncrypted=reset-confirm
+LoadCredentialEncrypted=reset-lone-cp
+ExecStart=/usr/bin/mjolnir-helper reset node-identity
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/
+ReadWritePaths=/etc/kubernetes /etc/NetworkManager/system-connections /var/lib/kubelet /var/lib/mjolnir /var/lib/etcd /run/mjolnir

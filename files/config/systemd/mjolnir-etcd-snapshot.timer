@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily off-node etcd snapshot
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Unit=mjolnir-etcd-snapshot.service
+
+[Install]
+WantedBy=timers.target

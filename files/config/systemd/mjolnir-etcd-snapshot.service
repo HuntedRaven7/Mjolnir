@@ -1,0 +1,18 @@
+[Unit]
+Description=Capture and upload an off-node etcd snapshot
+Wants=network-online.target
+After=network-online.target var-lib-etcd.mount
+ConditionPathExists=/etc/kubernetes/admin.conf
+
+[Service]
+Type=oneshot
+# Destination and token are provisioning credentials, never image config.
+LoadCredential=etcd-snapshot-url
+LoadCredential=etcd-snapshot-token
+ExecStart=/usr/bin/mjolnir-helper snapshot-etcd
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/
+ReadWritePaths=/var/lib/etcd /var/lib/mjolnir

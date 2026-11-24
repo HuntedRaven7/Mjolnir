@@ -1,7 +1,8 @@
 [Unit]
-Description=Persistent Mjolnir state
+Description=Persistent Mjolnir state (LUKS-backed btrfs)
 DefaultDependencies=no
 Conflicts=umount.target
+After=cryptsetup.target
 Before=local-fs.target umount.target
 
 [Mount]

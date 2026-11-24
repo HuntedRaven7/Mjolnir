@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Static checks for encrypted state and scoped factory reset.
+
+These assert the public contract of the feature: the partition is encrypted,
+its TPM2 policy is signed by a key that never enters the runtime image, and a
+reset cannot proceed without the seals, topology checks and a drain.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def text(path: str) -> str:
+    p = ROOT / path
+    return p.read_text() if p.is_file() else ""
+
+
+def check() -> list[str]:
+    errors: list[str] = []
+
+    repart = text("files/config/repart.d/20-mjolnir-state.conf")
+    if not re.search(r"^Encrypt=key-file\s*$", repart, re.MULTILINE):
+        errors.append("repart.d: MjolnirState is not encrypted with a key-file slot")
+    if not re.search(r"^FactoryReset=yes\s*$", repart, re.MULTILINE):
+        errors.append("repart.d: state partition is not factory-resettable")
+
+    crypttab = text("files/config/crypttab")
+    if not re.search(
+        r"^mjolnir-state\s+/dev/disk/by-partlabel/MjolnirState\s+-\s+"
+        r"[^#]*tpm2-device=auto[^#]*x-initrd\.attach\s*$",
+        crypttab, re.MULTILINE,
+    ):
+        errors.append("crypttab: missing discoverable TPM2 early-boot mapping")
+    if re.search(r"/dev/(sd|nvme|vd)[a-z0-9]+", crypttab):
+        errors.append("crypttab: hardcoded device path")
+
+    mount = text("files/config/systemd/var-lib-mjolnir.mount")
+    if "After=cryptsetup.target" not in mount:
+        errors.append("var-lib-mjolnir.mount: does not order after cryptsetup.target")
+    if "/dev/disk/by-label/MjolnirState" not in mount:
+        errors.append("var-lib-mjolnir.mount: does not use the discoverable label")
+
+    dracut = text("files/config/dracut/50-mjolnir-tpm2.conf")
+    for module in ("crypt", "tpm2-tss"):
+        if module not in dracut:
+            errors.append(f"dracut config: missing {module} module")
+    if "/etc/crypttab" not in dracut:
+        errors.append("dracut config: crypttab is not included in the initramfs")
+
+    initramfs = text("elements/kernel/initramfs.bst")
+    for dep in ("components/cryptsetup.bst", "components/tpm2-tss.bst"):
+        if dep not in initramfs:
+            errors.append(f"initramfs element: missing build dependency {dep}")
+
+    uki = text("elements/uki/mjolnir-uki.bst")
+    for option in ("--pcr-private-key=", "--pcr-public-key=", "--pcr-banks=sha256"):
+        if option not in uki:
+            errors.append(f"UKI element: missing {option} (signed PCR 11 policy)")
+    if ".pcrsig" not in uki or ".pcrpkey" not in uki:
+        errors.append("UKI element: PCR signature/public key section not asserted")
+
+    keys = text("elements/uki/boot-keys.bst")
+    if "PCR.key" not in keys or "PCR.pub" not in keys:
+        errors.append("boot-keys element: PCR signing keypair is not generated")
+    for element in ROOT.glob("elements/**/*.bst"):
+        if element.name == "boot-keys.bst" or element.name == "mjolnir-uki.bst":
+            continue
+        if "uki/boot-keys.bst" in element.read_text():
+            errors.append(f"{element.name}: signing-only key element in runtime stack")
+
+    # Only public PCR material may be committed. No private key or certificate
+    # file is tracked outside the gitignored files/boot-keys directory.
+    for suffix in (".key", ".pem", ".crt"):
+        for p in ROOT.rglob("*" + suffix):
+            if p.is_file() and "boot-keys" not in p.parts:
+                errors.append(f"key material in repository: {p.relative_to(ROOT)}")
+
+    enroll = text("files/config/systemd/mjolnir-state-enroll.service")
+    for fragment in (
+        "--wipe-slot=empty", "--tpm2-device=auto", "--tpm2-pcrs=7",
+        "--tpm2-public-key-pcrs=11", "ConditionPathExists=!/var/lib/mjolnir/.tpm2-enrolled",
+    ):
+        if fragment not in enroll:
+            errors.append(f"state enrollment unit: missing {fragment}")
+
+    helper = text("src/mjolnir.c")
+    for fragment in (
+        "enum reset_scope", '"reset-confirm"', "control_plane_count",
+        "remove_etcd_member", "snapshot_fresh", "cordon_drain", "nftw",
+        '"reset-lone-cp"', '"factory-reset:node-identity"',
+    ):
+        if fragment not in helper:
+            errors.append(f"mjolnir-helper: missing reset gate {fragment}")
+    if re.search(r'"/bin/sh"|"sh"\s*,', helper):
+        errors.append("mjolnir-helper: shell invocation in reset path")
+
+    for scope in ("node-identity", "etcd-data", "full"):
+        unit = text(f"files/config/systemd/mjolnir-reset-{scope}.service")
+        if "LoadCredentialEncrypted=reset-confirm" not in unit:
+            errors.append(f"reset {scope}: sealed confirmation is not required")
+        if f"mjolnir-helper reset {scope}" not in unit:
+            errors.append(f"reset {scope}: unit does not invoke the scoped helper")
+    if "mjolnir-etcd-snapshot.timer" not in text("files/config/presets/80-mjolnir.preset"):
+        errors.append("snapshot timer is not enabled by preset")
+
+    fleet = text("plugins/console/src/fleet.c")
+    for method in ("FactoryReset", "ResetPreflight", "SnapshotNow"):
+        if f"io.mjolnir.Fleet.{method}" not in fleet:
+            errors.append(f"Varlink: missing {method}")
+    if '"node-identity", "etcd-data", "full"' not in fleet:
+        errors.append("Varlink: reset scope whitelist is missing")
+
+    for doc in ("docs/SECURITY.md", "docs/PROVISIONING.md",
+                "docs/IMPERMANENCE.md", "docs/ARCHITECTURE.md"):
+        if not text(doc).strip():
+            errors.append(f"missing or empty documentation: {doc}")
+
+    return errors
+
+
+def main() -> int:
+    errors = check()
+    if errors:
+        print("State/reset static checks FAILED:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        return 1
+    print("State/reset static checks passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

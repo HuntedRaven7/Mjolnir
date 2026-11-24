@@ -1,0 +1,17 @@
+[Unit]
+Description=Mjolnir factory reset: all state plus repart state partition
+Documentation=man:systemd-cryptenroll(1)
+Wants=network-online.target
+After=network-online.target var-lib-mjolnir.mount var-lib-etcd.mount
+
+[Service]
+Type=oneshot
+LoadCredentialEncrypted=reset-confirm
+LoadCredentialEncrypted=reset-lone-cp
+ExecStart=/usr/bin/mjolnir-helper reset full
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/
+ReadWritePaths=/etc/kubernetes /etc/NetworkManager/system-connections /var/lib/kubelet /var/lib/mjolnir /var/lib/etcd /run/mjolnir

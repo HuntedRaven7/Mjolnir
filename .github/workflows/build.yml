@@ -30,6 +30,7 @@ jobs:
         run: |
           python3 tests/test_units.py
           python3 tests/test_diagnostics.py
+          python3 tests/test_state_reset.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.

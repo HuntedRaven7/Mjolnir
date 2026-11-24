@@ -19,6 +19,10 @@ config:
       /config/kubeadm-init.yaml > "${root}/etc/mjolnir/kubeadm-init.yaml"
     # Impermanent root: /etc and /var are tmpfs each boot. Persistent state
     # is re-attached by native .mount units from /usr (fstab is ephemeral).
+    # crypttab is consumed by dracut at build time and rehydrated into the
+    # volatile /etc at boot. Only mapping options are stored; no keys.
+    install -Dm644 /config/crypttab "${root}/etc/crypttab"
+    install -Dm644 /config/crypttab "${root}/usr/share/factory/etc/crypttab"
     install -Dm644 /config/bootc/kargs.d/50-volatile.toml \
       "${root}/usr/lib/bootc/kargs.d/50-volatile.toml"
     install -Dm644 /config/bootc/kargs.d/60-journal-console.toml \
