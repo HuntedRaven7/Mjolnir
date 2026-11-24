@@ -97,7 +97,7 @@ This is a build-time property, not a runtime policy.
   intentional — only firmware reachable from FSDK is shipped.
 - Cilium is the CNI, replacing kube-proxy (`kubeProxyReplacement=true`).
   Kernel options required by Cilium come from the pinned FSDK kernel config;
-  `tests/test_kernel_config.py` checks the BPF options in CI. See section 10
+  `tests/test_kernel_config.py` checks the BPF options in CI. See section 11
   for the VXLAN gap and what the checks do not cover.
 
 ## 6. Kubernetes (no k0s)
