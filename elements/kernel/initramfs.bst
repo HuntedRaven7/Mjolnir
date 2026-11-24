@@ -9,6 +9,9 @@ build-depends:
 - freedesktop-sdk.bst:components/fakecap.bst
 - freedesktop-sdk.bst:components/dracut.bst
 - freedesktop-sdk.bst:components/cryptsetup.bst
+# dracut's crypt module depends on dm, whose check requires dmsetup. FSDK's
+# cryptsetup element ships only libdevmapper; lvm2.bst provides the binary.
+- freedesktop-sdk.bst:components/lvm2.bst
 - freedesktop-sdk.bst:components/tpm2-tss.bst
 - freedesktop-sdk.bst:components/linux.bst
 - freedesktop-sdk.bst:components/linux-firmware.bst
@@ -39,8 +42,12 @@ config:
     # TPM2-backed LUKS needs cryptsetup, its systemd token plugin and tpm2-tss
     # in the initramfs. Under systemd.volatile=yes /etc/crypttab is tmpfs at
     # runtime, so the build-time copy below is what early boot reads.
-    token=$(find /usr/lib /usr/lib64 -name 'libcryptsetup-token-systemd-tpm2.so*' -print -quit 2>/dev/null || true)
-    echo "TPM2 cryptsetup token plugin: ${token:-MISSING}"
+    # FSDK splits debug symbols into /usr/lib/debug; a bare -name match picks
+    # the .debug file, which is not a loadable cryptsetup token plugin.
+    token=$(find /usr/lib /usr/lib64 -path '*/debug/*' -prune -o \
+      -name 'libcryptsetup-token-systemd-tpm2.so*' -print -quit 2>/dev/null || true)
+    test -n "${token}"
+    echo "TPM2 cryptsetup token plugin: ${token}"
     if [ -n "${token}" ]; then
       install -Dm644 "${token}" /usr/lib/cryptsetup/libcryptsetup-token-systemd-tpm2.so
     fi
