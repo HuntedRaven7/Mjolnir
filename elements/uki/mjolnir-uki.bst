@@ -56,9 +56,12 @@ config:
     test -f "$KDIR/initramfs.img"
 
     # bootc computes the composefs digest of the exact rootfs and generates the
-    # `.cmdline` (v1 digest + v2 fallback + kargs.d entries such as
-    # systemd.volatile=yes). No --karg may be passed at install time.
+    # `.cmdline`. Use the same EROFS version bootc writes at install time so
+    # the digest is reproducible; a v1+v2 pair made install-time validation
+    # fail on the v1 entry with "incompatible composefs-rs version".
+    # No --karg may be passed at install time.
     bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
+      --erofs-version=v2 \
       -- --output "$WORK/mjolnir.efi" \
       --uname "${kver}" \
       --signtool=systemd-sbsign --no-sign-kernel \

@@ -34,8 +34,6 @@ config:
     cp -a /uki/boot/EFI/Linux/. "${root}/boot/EFI/Linux/"
     mkdir -p "${root}/usr/lib/systemd/boot/efi"
     cp -a /uki/usr/lib/systemd/boot/efi/. "${root}/usr/lib/systemd/boot/efi/"
-    mkdir -p "${root}/usr/share/mjolnir"
-    cp /uki/usr/share/mjolnir/composefs-digest.txt "${root}/usr/share/mjolnir/"
 
     # --- build the OCI layout -----------------------------------------------
     cd "%{install-root}"
