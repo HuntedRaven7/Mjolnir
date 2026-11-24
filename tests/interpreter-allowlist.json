@@ -1,0 +1,567 @@
+{
+  "_comment": "Exceptions to the interpreter policy. Every entry needs a reason and a PR/issue ref. New entries require a PR that argues them.",
+  "content_shebang": [
+    {
+      "path": "etc/X11/xinit/xinitrc.d/50-systemd-user.sh",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "etc/avahi/avahi-autoipd.action",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "etc/avahi/avahi-dnsconfd.action",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/addgnupghome",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/applygnupgdefaults",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/augenrules",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/bashbug",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/bzdiff",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/bzgrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/bzmore",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/ca-legacy",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/compile_et",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/cracklib-format",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/cracklib-update",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/create-cracklib-dict",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/e2scrub",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/e2scrub_all",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/egrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/fgrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/fsck.xfs",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/gunzip",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/gzexe",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/gzip",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/ldd",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/mako-render",
+      "interpreter": "/usr/bin/python",
+      "reason": "FSDK Python script; no Python interpreter is shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/markdown_py",
+      "interpreter": "/usr/bin/python",
+      "reason": "FSDK Python script; no Python interpreter is shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/mk_cmds",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/mtrace",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/pam_namespace_helper",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/psl-make-dafsa",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/pydoc3.14",
+      "interpreter": "/usr/bin/python3.14",
+      "reason": "FSDK Python script; no Python interpreter is shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/routel",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/sotruss",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/tzselect",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/uncompress",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/unicode_start",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/unicode_stop",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/update-ca-trust",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/wcurl",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_admin",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_bmap",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_freeze",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_info",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_metadump",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_mkfile",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_ncheck",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_property",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_protofile",
+      "interpreter": "/usr/bin/python3",
+      "reason": "FSDK Python script; no Python interpreter is shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xfs_scrub_all",
+      "interpreter": "/usr/bin/python3",
+      "reason": "FSDK Python script; no Python interpreter is shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xtrace",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xzdiff",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xzgrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xzless",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/xzmore",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zcat",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zcmp",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zdiff",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zegrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zfgrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zforce",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zgrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zmore",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/znew",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zstdgrep",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/bin/zstdless",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/lib/NetworkManager/dispatcher.d/pre-up.d/90-nm-cloud-setup.sh",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/lib/dracut/modules.d/50ostree/module-setup.sh",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/lib/dracut/modules.d/51bootc/module-setup.sh",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/lib/systemd/system-generators/bootc-systemd-generator",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/lib/systemd/system-generators/nm-initrd-generator.sh",
+      "interpreter": "/bin/bash",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/lib/systemd/systemd-update-helper",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/gpg-wks-client",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/condrestart",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/reload",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/restart",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/resume",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/rotate",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/state",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/initscripts/legacy-actions/auditd/stop",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/libostree/grub2-15_ostree",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/libexec/p11-kit/trust-extract-compat",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/icu/78.3/install-sh",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/icu/78.3/mkinstalldirs",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/pam/security/namespace.init",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/request-key-debug.sh",
+      "interpreter": "/bin/sh",
+      "reason": "FSDK helper script; /bin/sh and /bin/bash are removed by elements/oci/rootfs.bst, so it cannot execute.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/jpegsize",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/lsrpm",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/slcov",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/sldb",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/slprof",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/slstkchk",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    },
+    {
+      "path": "usr/share/slsh/scripts/svnsh",
+      "interpreter": "/usr/bin/env",
+      "reason": "FSDK helper script; its interpreter is not shipped in the image.",
+      "ref": "baseline"
+    }
+  ],
+  "content_elf": [],
+  "graph_runtime": [
+    {
+      "element": "freedesktop-sdk.bst:components/python3.bst",
+      "reason": "FSDK runtime elements (ca-certificates, glib, gnutls, podman, linux-firmware, etc.) declare python3 for build-time data generation. elements/oci/rootfs.bst deletes all Python interpreters and scripts from the shipped tree; the content-layer check enforces that.",
+      "ref": "baseline"
+    }
+  ],
+  "unit_exec": [],
+  "login_shell": []
+}

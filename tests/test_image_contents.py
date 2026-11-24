@@ -43,8 +43,8 @@ def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, capture_output=True, **kw)
 
 
-def image_files(image: str) -> tuple[list[str], list[tuple[str, int]]]:
-    """Return (paths, suid_sgid) from the image tar stream."""
+def image_files(image: str, on_file=None) -> tuple[list[str], list[tuple[str, int]]]:
+    """Return (paths, suid_sgid); on_file(path, bytes) sees each regular file."""
     name = f"mjolnir-inspect-{image.replace('/', '_').replace(':', '_')}"
     sh(PODMAN + ["rm", "-f", name])
     sh(PODMAN + ["create", "--name", name, image])
@@ -60,8 +60,13 @@ def image_files(image: str) -> tuple[list[str], list[tuple[str, int]]]:
             for member in tf:
                 p = member.name.lstrip("./")
                 paths.append(p)
-                if member.isfile() and member.mode & 0o6000:
-                    suid.append((p, member.mode))
+                if member.isfile():
+                    if member.mode & 0o6000:
+                        suid.append((p, member.mode))
+                    if on_file is not None:
+                        stream = tf.extractfile(member)
+                        if stream is not None:
+                            on_file(p, stream.read())
         rc = proc.wait()
         if rc != 0:
             raise RuntimeError(f"podman export failed: {rc}")
@@ -71,8 +76,15 @@ def image_files(image: str) -> tuple[list[str], list[tuple[str, int]]]:
 
 
 def check(image: str) -> list[str]:
+    import interpreter_policy as policy
+
     errors: list[str] = []
-    paths, suid = image_files(image)
+    allow = policy.load_allowlist()
+
+    def inspect(path: str, blob: bytes) -> None:
+        errors.extend(policy.check_content([(path, blob)], allow))
+
+    paths, suid = image_files(image, on_file=inspect)
     pathset = set(paths)
 
     for exact in FORBIDDEN_EXACT:
@@ -99,6 +111,17 @@ def check(image: str) -> list[str]:
     lid_conf = "usr/lib/systemd/logind.conf.d/50-ignore-lid.conf"
     if lid_conf not in pathset:
         errors.append(f"missing required config: /{lid_conf}")
+
+    # Build-only interpreters (bash in base/sandbox-tools.bst) are fine; only
+    # runtime deps of the shipped payload stack are forbidden.
+    if os.environ.get("SKIP_GRAPH_CHECK") != "1":
+        try:
+            errors.extend(policy.check_graph(policy.graph_elements(), allow))
+        except RuntimeError as exc:
+            errors.append(f"[graph] {exc}")
+
+    for stale in policy.stale_entries(allow):
+        errors.append(f"[allowlist] stale entry {stale}; remove it in this PR")
     return errors
 
 
