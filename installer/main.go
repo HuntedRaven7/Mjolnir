@@ -342,6 +342,11 @@ func install(c *config, disk string, r runner) error {
 			if part == disk {
 				continue
 			}
+			// lsblk names can outlive their device node during a repartition;
+			// do not emit a confusing wipefs error for those.
+			if _, err := os.Stat(part); err != nil {
+				continue
+			}
 			_ = r.run("wipefs", "--all", "--force", part)
 		}
 	}

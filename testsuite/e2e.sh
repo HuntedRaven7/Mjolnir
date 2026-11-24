@@ -84,7 +84,9 @@ done
 
 rm -f "$DISK" "$BUILD/install.log"
 truncate -s 30G "$DISK"
-qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 \
+# bootc's composefs pull runs skopeo inside a privileged container and needs
+# more than 4 GB; with 4 GB the OOM killer kills skopeo mid-layer.
+qemu-system-x86_64 -enable-kvm -m 8192 -smp 2 \
   -drive "if=pflash,format=raw,readonly=on,file=$OVMF" \
   -cdrom "$INSTALL_ISO" \
   -drive file="$DISK",format=raw,if=virtio \

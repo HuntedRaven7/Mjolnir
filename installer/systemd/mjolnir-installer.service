@@ -1,5 +1,9 @@
 [Unit]
 Description=Mjolnir installer
+# A broken image must not spend 15 minutes in a restart loop. Two attempts are
+# enough to prove it is broken; keep the unit failed so the log shows the cause.
+StartLimitIntervalSec=120
+StartLimitBurst=2
 # Do not wait for network-online.target: on a machine with no working network
 # that target blocks for ~90s and the installer looks like it never starts.
 # The helper retries a failed pull via Restart=on-failure.
