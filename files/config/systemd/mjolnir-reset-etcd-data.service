@@ -8,6 +8,8 @@ After=network-online.target var-lib-mjolnir.mount var-lib-etcd.mount
 Type=oneshot
 LoadCredentialEncrypted=reset-confirm:/run/credentials/@system/reset-confirm.cred
 LoadCredentialEncrypted=reset-lone-cp:/run/credentials/@system/reset-lone-cp.cred
+# The lone-control-plane gate reads etcd-snapshot-* from the system credential
+# directory through the helper's credential reader.
 ExecStart=/usr/bin/mjolnir-helper reset etcd-data
 NoNewPrivileges=yes
 PrivateTmp=yes
