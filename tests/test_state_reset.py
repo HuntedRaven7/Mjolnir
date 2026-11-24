@@ -48,11 +48,14 @@ def check() -> list[str]:
     dracut = text("files/config/dracut/50-mjolnir-tpm2.conf")
     if "add_dracutmodules+=\" crypt " not in dracut:
         errors.append("dracut config: missing crypt module")
-    for item in ("/etc/crypttab", "libcryptsetup-token-systemd-tpm2.so"):
-        if item not in dracut:
-            errors.append(f"dracut config: {item} is not included in the initramfs")
+    if "/etc/crypttab" not in dracut:
+        errors.append("dracut config: crypttab is not included in the initramfs")
+    if "libcryptsetup-token-systemd-tpm2.so" not in dracut:
+        errors.append("dracut config: TPM2 token plugin is not an optional install item")
 
     initramfs = text("elements/kernel/initramfs.bst")
+    if "find /usr/lib" not in initramfs:
+        errors.append("initramfs element: TPM2 token plugin path is not discovered")
     for dep in ("components/cryptsetup.bst", "components/tpm2-tss.bst"):
         if dep not in initramfs:
             errors.append(f"initramfs element: missing build dependency {dep}")

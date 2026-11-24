@@ -39,7 +39,11 @@ config:
     # TPM2-backed LUKS needs cryptsetup, its systemd token plugin and tpm2-tss
     # in the initramfs. Under systemd.volatile=yes /etc/crypttab is tmpfs at
     # runtime, so the build-time copy below is what early boot reads.
-    test -f /usr/lib/cryptsetup/libcryptsetup-token-systemd-tpm2.so
+    token=$(find /usr/lib /usr/lib64 -name 'libcryptsetup-token-systemd-tpm2.so*' -print -quit 2>/dev/null || true)
+    echo "TPM2 cryptsetup token plugin: ${token:-MISSING}"
+    if [ -n "${token}" ]; then
+      install -Dm644 "${token}" /usr/lib/cryptsetup/libcryptsetup-token-systemd-tpm2.so
+    fi
     install -Dm644 /config/crypttab /etc/crypttab
     install -Dm644 /config/dracut/50-mjolnir-tpm2.conf \
       /etc/dracut.conf.d/50-mjolnir-tpm2.conf
