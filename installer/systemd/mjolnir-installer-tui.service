@@ -1,5 +1,7 @@
 [Unit]
 Description=Mjolnir installer (interactive TUI)
+StartLimitIntervalSec=120
+StartLimitBurst=2
 After=network.target
 Wants=network.target
 
