@@ -15,10 +15,10 @@ fail() { echo "::error::$*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
 need() { command -v "$1" >/dev/null || fail "missing tool: $1"; }
 
-for t in podman qemu-system-x86_64 objcopy losetup blkid mount umount find openssl base64; do
+for t in podman qemu-system-x86_64 objcopy losetup blkid mount umount find openssl base64 sudo; do
   need "$t"
 done
-[ "$(id -u)" -eq 0 ] || fail "run as root (sudo)"
+sudo -n true || fail "passwordless sudo is required for the privileged install and QEMU"
 
 rm -rf "$WORK"
 mkdir -p "$WORK/rootfs" "$WORK/esp"
@@ -56,7 +56,7 @@ done
 [ -n "$ESP_PART" ] || fail "no ESP partition found on $LOOP"
 sudo mount "$ESP_PART" "$WORK/esp"
 
-UKI=$(find "$WORK/esp/EFI/Linux/bootc" -name '*.efi' -type f 2>/dev/null | head -1)
+UKI=$(sudo find "$WORK/esp/EFI/Linux/bootc" -name '*.efi' -type f 2>/dev/null | head -1)
 [ -n "$UKI" ] || fail "bootc did not install a UKI to the ESP"
 sudo objcopy -O binary -j .cmdline "$UKI" "$WORK/cmdline.bin"
 CMD=$(tr -d '\000' < "$WORK/cmdline.bin")
@@ -68,7 +68,7 @@ pass "installed UKI pins the digest of the image under test"
 
 echo "==> registering the separately signed debug UKI as a second boot entry"
 sudo podman cp mjolnir-boot-src:/boot/mjolnir-debug "$WORK/"
-DBG_EFI=$(find "$WORK/mjolnir-debug" -name '*.efi' -type f | head -1)
+DBG_EFI=$(sudo find "$WORK/mjolnir-debug" -name '*.efi' -type f | head -1)
 [ -n "$DBG_EFI" ] || fail "debug UKI is missing from the image"
 sudo install -Dm644 "$DBG_EFI" "$WORK/esp/EFI/Linux/$(basename "$DBG_EFI")"
 sudo install -Dm644 "$WORK/mjolnir-debug/mjolnir-debug.conf" \
