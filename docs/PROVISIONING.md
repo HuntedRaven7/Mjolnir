@@ -36,8 +36,7 @@ keep it outside the repository.
 | `wifi-ssid` | wifi | WiFi network name (station mode) |
 | `wifi-psk` | wifi | 64-character hex WPA2/WPA3 PSK |
 | `varlink-httpd.tls.trust` | varlink-httpd | PEM CA used to verify mTLS clients |
-| `registry-user`, `registry-token` | installer | optional GHCR credentials for the image pull |
-| `wifi-ssid`, `wifi-psk` | installer | optional WiFi used during installation |
+| `registry-user`, `registry-token` | provisioning | optional GHCR credentials for the image pull |
 
 `wifi-*` credentials are optional; without them the node uses wired networking
 only. `join-*` credentials are required on workers and ignored on the control

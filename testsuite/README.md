@@ -1,45 +1,23 @@
-# Mjolnir E2E testsuite
+# Mjolnir testsuite
 
-A small, self-contained E2E harness adapted from the patterns in
-[projectbluefin/testsuite](https://github.com/projectbluefin/testsuite)
-(Apache-2.0). Unlike the upstream suite, it does **not** boot a GNOME session
-and does **not** inject a shell/SSH user into the image: Mjolnir has no shell or
-sshd, so the tests drive the VM via the serial console and the mTLS Varlink API
-from the runner host.
-
-## What it verifies
-
-| Check | How |
-|---|---|
-| Image boots | QEMU boots the `bootc install to-disk` image; `/run/mjolnir/ready` appears on the serial console |
-| bootc status | `bootc status --json` reports the pinned image reference |
-| System health | No failed systemd units and no critical journal entries, read via Varlink `io.mjolnir.Fleet.Status` and the serial console |
-| Immutability | `/usr` is read-only via `findmnt` on the serial console; image digest/labels verified host-side |
-| SELinux | Enforcing mode and no AVC denials (when the image ships a policy) |
-| Provenance | Cosign keyless verify on the published image with our OIDC identity |
-| Fleet state | `MjolnirNode` CRD exists and the exporter reports the expected fields |
+Adapters for running Mjolnir's cluster-level checks without a shell or SSH user
+inside the image. The checks run from the runner host against kind-based
+clusters and the mTLS Varlink API.
 
 ## Layout
 
-- `e2e.sh` — host-side QEMU boot + checks (invoked by CI and locally).
-- `features/*.feature` — behave-style scenario descriptions (documentation of
-  intent; the shell script is the executable source of truth for now).
-- `multinode/` — kind-based KubeStellar WDS↔ITS propagation test (no QEMU),
-  run by `.github/workflows/multinode.yml` on `testing`.
+- `features/*.feature` — behave-style descriptions of boot, status and
+  impermanence behaviour (documentation of intent, not executable tests).
+- `multinode/` — kind-based KubeStellar WDS↔ITS propagation test, run by
+  `.github/workflows/multinode.yml` on `testing`.
+- `plugin-smoke.sh` — Console plugin smoke check, run by
+  `.github/workflows/plugin-test.yml`.
 
-`.github/workflows/e2e.yml` triggers after the `build` workflow has pushed
-`:testing` from `testing`, or on manual dispatch. It is intentionally **not** a
-required status check yet: the signed-UKI boot path is still being validated.
-The kind-based plugin and multinode tests are the currently-enforced gates.
+## Boot verification
 
-## Running locally
-
-Requires root (bootc install needs a real root user namespace), QEMU/KVM and
-`cosign`:
-
-```sh
-IMAGE=ghcr.io/huntedraven7/mjolnir:testing sudo ./testsuite/e2e.sh
-```
-
-CI uses the published `:testing` image. See `docs/RELEASING.md` for how a
-tested `:testing` digest is promoted to `:stable`.
+There is currently no automated boot test. The previous QEMU harness installed
+the image through a custom live ISO; it was removed because the composefs digest
+embedded in the signed UKI could not be reproduced from the final OCI rootfs at
+install time. A replacement should install with `bootc install to-disk` directly
+and assert that the UKI digest matches the installed deployment. See
+[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).

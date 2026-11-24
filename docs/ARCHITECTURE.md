@@ -182,11 +182,12 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
 
 ## 11. Open issues
 
-- **The image has not yet been proven to boot.** `e2e.yml` is triggered by
-  `merge_group`/manual dispatch, but merge queue is not enabled so it has never
-  run; the signed-UKI changes to `testsuite/e2e.sh` (UEFI/OVMF boot, no
-  `--karg`, ESP cmdline inspection) are untested. This is the highest remaining
-  risk.
+- **The image has not yet been proven to boot.** The removed QEMU boot harness
+  never reached a successful install: `bootc install` could not reproduce the
+  composefs digest embedded in the signed UKI from the final OCI rootfs. A new
+  boot test must be built around `bootc install to-disk` directly and must
+  verify that the UKI digest and the installed rootfs agree. This is the highest
+  remaining risk.
 - `quality.yml` (reproducibility, BST-native SBOM) has not yet gone green. The
   golden image diff now runs in `build.yml` on pushes to `testing` instead of
   on PRs.
