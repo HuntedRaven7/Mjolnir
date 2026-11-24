@@ -36,20 +36,17 @@ pass "expected composefs digest=$EXPECTED"
 
 echo "==> installing with bootc install to-disk"
 truncate -s 32G "$WORK/disk.raw"
-# Via-loopback creates the loop device inside the container, where there is no
-# udev database for bootc's Discoverable Partitions root-type check. Override
-# that check with a CI-only config in /etc; the shipped image keeps DPS and
-# discoverable device paths. No --karg: a sealed UKI carries its whole cmdline
-# in the signed .cmdline section, and bootc refuses install-time kargs.
-mkdir -p "$WORK/bootc-install"
-cat > "$WORK/bootc-install/99-ci-loopback.toml" <<'EOF'
-[install]
-discoverable-partitions = false
-EOF
+# bootc hard-checks the root partition's DPS type GUID before mkfs, reading
+# ID_PART_ENTRY_TYPE through `lsblk -O` from /run/udev. Via-loopback creates the
+# loop device inside this container, so an empty /run/udev makes a valid root
+# partition report type <none> and the install aborts. Bind the host udev
+# database read-only instead of masking the check: the proof then runs with the
+# shipped discoverable-partitions layout. No --karg: a sealed UKI carries its
+# whole cmdline in the signed .cmdline section, and bootc refuses install-time
+# kargs.
 sudo podman run --rm --privileged --pid=host \
-  -v /dev:/dev --tmpfs /run/udev \
+  -v /dev:/dev -v /run/udev:/run/udev:ro \
   -v /var/lib/containers:/var/lib/containers \
-  -v "$WORK/bootc-install:/etc/bootc/install:ro" \
   -v "$WORK:/data" "$IMAGE" \
   bootc install to-disk --composefs-backend --via-loopback /data/disk.raw \
     --filesystem btrfs --wipe --bootloader systemd
@@ -115,7 +112,7 @@ timeout 240 sudo qemu-system-x86_64 \
   -drive if=pflash,format=raw,unit=0,file="$WORK/code.fd",readonly=on \
   -drive if=pflash,format=raw,unit=1,file="$WORK/vars.fd" \
   -drive file="$WORK/disk.raw",format=raw,media=disk \
-  -smbios type=11,value=io.systemd.credential:mjolnir.boot-report=1 \
+  -smbios type=11,value=io.systemd.credential:mjolnir-boot-report=1 \
   -smbios "type=11,value=io.systemd.credential.binary:varlink-httpd.tls.trust=$CA_B64" \
   -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
   >"$SERIAL" 2>&1 &
