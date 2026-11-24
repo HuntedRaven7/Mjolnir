@@ -72,6 +72,12 @@ service registers `io.mjolnir.Fleet` at
 |---|---|
 | `Status` | Full status JSON |
 | `WifiStatus` | NetworkManager SSID, interface, link state and signal |
+| `Attestation` | TPM/DICE attestation evidence |
+| `JournalTail` | Last 1 to 1000 journal lines, optionally for one unit |
+| `UnitStatus` | `systemctl show` for a named unit and allowlisted properties |
+| `BootcStatus` | Parsed `bootc status --json` plus `exitCode` |
+| `KubeadmPreflight` | Read-only `kubeadm init phase preflight --dry-run` output |
+| `NetworkChecks` | `ip -j addr`, `ip -j route`, `ss -tuln`, `resolvectl status` and WiFi state |
 | `Upgrade` | `bootc upgrade --download-only` (stage, no reboot) |
 | `ClearRebootLock` | Remove local lock files; kured's cluster lock is cleared via `kubectl annotate ds kured weave.works/kured-node-lock-` |
 | `Reboot` | Write `/run/reboot-required`; kured drains and reboots the node |
@@ -83,6 +89,31 @@ Example:
 varlinkctl call https://NODE:1031/ws/services/io.mjolnir.Fleet \
   io.mjolnir.Fleet.Status '{}'
 ```
+
+`GetInfo` returns the full method list in its `methods` field.
+
+## Read-only diagnostics
+
+`JournalTail`, `UnitStatus`, `BootcStatus`, `KubeadmPreflight` and
+`NetworkChecks` never change node state. They run compiled binaries with a
+fixed argv; no caller string reaches a shell or an option position.
+
+- `lines` must be an integer from 1 to 1000 and defaults to 100.
+- `unit` must be a systemd unit name of at most 128 characters. `JournalTail`
+  accepts it as an optional filter; `UnitStatus` requires it.
+- `properties` is optional. When given it is an array of 1 to 16 names from
+  `LoadState`, `ActiveState`, `SubState`, `MainPID`, `ExecMainStatus`, `Result`,
+  `Description`, `FragmentPath`, `ActiveEnterTimestamp` and `NRestarts`.
+- Output is capped at 64 KiB and each command is killed after 5 seconds. A
+  timeout returns `exitCode` 124. Invalid arguments return an
+  `InvalidArguments` error.
+- `KubeadmPreflight` uses `/etc/mjolnir/kubeadm-init.yaml` and checks node
+  readiness before join. On a joined control plane it reports the checks that
+  now fail because the cluster already exists.
+
+bootc already handles a bad update: a staged deployment that does not come up
+is rolled back to the previous one. No separate rollback service or Varlink
+method is added here.
 
 ## kured
 

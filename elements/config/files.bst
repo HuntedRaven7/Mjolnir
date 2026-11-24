@@ -21,6 +21,8 @@ config:
     # is re-attached by native .mount units from /usr (fstab is ephemeral).
     install -Dm644 /config/bootc/kargs.d/50-volatile.toml \
       "${root}/usr/lib/bootc/kargs.d/50-volatile.toml"
+    install -Dm644 /config/bootc/kargs.d/60-journal-console.toml \
+      "${root}/usr/lib/bootc/kargs.d/60-journal-console.toml"
     install -Dm644 /config/repart.d/20-mjolnir-state.conf \
       "${root}/usr/lib/repart.d/20-mjolnir-state.conf"
     install -Dm644 /config/journald/10-persistent.conf \
