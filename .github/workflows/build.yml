@@ -103,6 +103,15 @@ jobs:
           just bst build oci/mjolnir.bst
           just export
 
+      - name: Show BuildStream failure logs
+        if: failure()
+        run: |
+          for log in "$HOME"/.cache/buildstream/logs/mjolnir/kernel-initramfs/*-build.*.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log ====="
+            cat "$log"
+          done
+
       - name: Image content checks
         run: just test
 
