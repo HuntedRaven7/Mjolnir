@@ -31,6 +31,7 @@ required = [
     "/usr/share/mjolnir/manifests/crds/mjolnirnodes.yaml",
     "/usr/share/mjolnir/manifests/kured/kured.yaml",
     "/usr/lib/bootc/kargs.d/50-volatile.toml",
+    "/usr/lib/bootc/kargs.d/60-journal-console.toml",
     "/usr/lib/repart.d/20-mjolnir-state.conf",
     "/usr/lib/systemd/system/var-lib-mjolnir.mount",
     "/usr/lib/systemd/system/var-lib-etcd.mount",

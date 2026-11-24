@@ -18,7 +18,8 @@ python3 scripts/make-credentials.py --out ./cred --role worker \
   --join-token "$TOKEN" --ca-cert-hash "sha256:$HASH" \
   --endpoint control-plane.example:6443 \
   --wifi-ssid homelab --wifi-psk "$PSK" \
-  --tls-ca ./client-ca.pem
+  --tls-ca ./client-ca.pem \
+  --journal-forward-socket collector.example:19532
 ```
 
 Mount the resulting directory where the provisioning system expects it (for
@@ -36,6 +37,7 @@ keep it outside the repository.
 | `wifi-ssid` | wifi | WiFi network name (station mode) |
 | `wifi-psk` | wifi | 64-character hex WPA2/WPA3 PSK |
 | `varlink-httpd.tls.trust` | varlink-httpd | PEM CA used to verify mTLS clients |
+| `journal.forward_to_socket` | journald | optional socket address for off-node journal export |
 | `registry-user`, `registry-token` | provisioning | optional GHCR credentials for the image pull |
 
 `wifi-*` credentials are optional; without them the node uses wired networking
@@ -52,6 +54,26 @@ plane.
    KubeStellar manifests from `/usr/share/mjolnir/manifests`.
 6. On workers, `mjolnir-join.service` runs `kubeadm join` with the token.
 7. `varlink-httpd.socket` accepts mTLS connections on port 1031.
+
+## Debugging a node that never joins
+
+A node with no cluster connection still has to explain why. Two mechanisms work
+before Kubernetes starts:
+
+- The signed UKI carries `console=ttyS0,115200` and
+  `systemd.journald.forward_to_console=1`. Journald writes warning-level and
+  higher entries to the serial console. The kargs live in `kargs.d` and are
+  baked into the signed `.cmdline`, so you cannot change them at boot time.
+- The `journal.forward_to_socket` credential sets journald's `ForwardToSocket=`.
+  Journald sends the journal export stream to that address. Run
+  `systemd-journal-remote` on the collector to store it. The node needs no
+  cluster join, token or shell for this path. Leave the credential unset when
+  you do not run a collector.
+
+Forwarding is synchronous inside journald. A collector that accepts data but
+never reads it can block journald, so use a dedicated receiver and monitor it.
+The serial console carries warnings only, which limits traffic on slow ports.
+No address or key is stored in the image or in this repository.
 
 ## Management
 

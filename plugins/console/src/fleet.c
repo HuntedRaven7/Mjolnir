@@ -4,9 +4,13 @@
 // compiled tools that are already in the image.
 
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +28,13 @@
 
 #define KUBECONFIG "/run/mjolnir/fleet.kubeconfig"
 #define STATUS_FILE "/run/mjolnir/mjolnirnode.yaml"
+
+// Diagnostics are read-only and bound in both time and output size. The
+// Varlink loop is single threaded, so one stuck command must never hold it.
+#define DIAG_TIMEOUT_MS 5000
+#define DEFAULT_TIMEOUT_MS 15000
+#define DIAG_OUTPUT_MAX 65536
+#define MAX_UNIT_LEN 128
 
 static void die(const char *msg) {
     fprintf(stderr, "mjolnir-fleet: %s: %s\n", msg, strerror(errno));
@@ -45,31 +56,73 @@ static int exists(const char *path) {
     return access(path, F_OK) == 0;
 }
 
-// Run a command and capture its stdout (trimmed). Returns 0 on success.
-static int run_capture(const char *const argv[], char *out, size_t outsz) {
+// Run a command, capture at most outsz-1 bytes of stdout, and kill it after
+// timeout_ms. Excess output is drained so a chatty child cannot block on the
+// pipe. Returns the child's exit status, 124 on timeout, or -1 on setup error.
+static int run_capture_timeout(const char *const argv[], char *out, size_t outsz,
+                               int timeout_ms) {
     out[0] = '\0';
+    if (outsz < 2) return -1;
     int fds[2];
-    if (pipe(fds) < 0) return -1;
+    if (pipe2(fds, O_CLOEXEC) < 0) return -1;
     pid_t pid = fork();
     if (pid < 0) { close(fds[0]); close(fds[1]); return -1; }
     if (pid == 0) {
         close(fds[0]);
         dup2(fds[1], 1);
+        close(fds[1]);
         int devnull = open("/dev/null", O_WRONLY);
         if (devnull >= 0) { dup2(devnull, 2); close(devnull); }
         execv(argv[0], (char *const *)argv);
         _exit(127);
     }
     close(fds[1]);
+    fcntl(fds[0], F_SETFL, O_NONBLOCK);
+
     size_t total = 0;
-    ssize_t n;
-    while (total < outsz - 1 && (n = read(fds[0], out + total, outsz - 1 - total)) > 0)
-        total += (size_t)n;
+    int timed_out = 0;
+    struct timespec start, now;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for (;;) {
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed = (now.tv_sec - start.tv_sec) * 1000 +
+                       (now.tv_nsec - start.tv_nsec) / 1000000;
+        int remaining = timeout_ms - (int)elapsed;
+        if (remaining <= 0) { timed_out = 1; break; }
+        struct pollfd pfd = { .fd = fds[0], .events = POLLIN };
+        int ready = poll(&pfd, 1, remaining);
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (ready == 0) { timed_out = 1; break; }
+        char chunk[4096];
+        ssize_t n = read(fds[0], chunk, sizeof(chunk));
+        if (n > 0) {
+            if (total < outsz - 1) {
+                size_t take = (size_t)n;
+                if (take > outsz - 1 - total) take = outsz - 1 - total;
+                memcpy(out + total, chunk, take);
+                total += take;
+            }
+            continue;
+        }
+        if (n == 0) break;
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
+        break;
+    }
     out[total] = '\0';
     close(fds[0]);
-    int status;
+
+    if (timed_out) kill(pid, SIGKILL);
+    int status = 0;
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    if (timed_out) return 124;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
+static int run_capture(const char *const argv[], char *out, size_t outsz) {
+    return run_capture_timeout(argv, out, outsz, DEFAULT_TIMEOUT_MS);
 }
 
 static int run_quiet(const char *const argv[]) {
@@ -232,6 +285,19 @@ static char *iso_now(void) {
     return buf;
 }
 
+static json_object *build_wifi(void) {
+    char *ssid = wifi_ssid();
+    char *ifname = wifi_interface();
+    json_object *wifi = json_object_new_object();
+    json_object_object_add(wifi, "ssid", json_object_new_string(ssid ? ssid : ""));
+    json_object_object_add(wifi, "interface", json_object_new_string(ifname ? ifname : ""));
+    json_object_object_add(wifi, "state", json_object_new_string(wifi_state(ifname)));
+    json_object_object_add(wifi, "signal", json_object_new_string(wifi_signal(ifname)));
+    free(ssid);
+    free(ifname);
+    return wifi;
+}
+
 static json_object *build_status(void) {
     json_object *root = json_object_new_object();
     char *name = node_name();
@@ -302,17 +368,9 @@ static json_object *build_status(void) {
     json_object_object_add(root, "rebootLock", json_object_new_boolean(exists("/run/reboot-lock") || exists("/etc/reboot-lock")));
     json_object_object_add(root, "rebootDeferred", json_object_new_boolean(exists("/run/kubestellar-reboot-deferred")));
 
-    // WiFi client state
-    char *ssid = wifi_ssid();
-    char *ifname = wifi_interface();
-    json_object *wifi = json_object_new_object();
-    json_object_object_add(wifi, "ssid", json_object_new_string(ssid ? ssid : ""));
-    json_object_object_add(wifi, "interface", json_object_new_string(ifname ? ifname : ""));
-    json_object_object_add(wifi, "state", json_object_new_string(wifi_state(ifname)));
-    json_object_object_add(wifi, "signal", json_object_new_string(wifi_signal(ifname)));
-    json_object_object_add(root, "wifi", wifi);
+    json_object_object_add(root, "wifi", build_wifi());
 
-    free(name); free(role); free(host); free(ssid); free(ifname);
+    free(name); free(role); free(host);
     return root;
 }
 
@@ -416,6 +474,71 @@ static json_object *action_result(const char *action, const char *message) {
     return o;
 }
 
+static json_object *diag_error(const char *code, const char *message) {
+    json_object *o = json_object_new_object();
+    json_object_object_add(o, "error", json_object_new_string(code));
+    json_object_object_add(o, "message", json_object_new_string(message));
+    return o;
+}
+
+// Unit names come from callers, so allow only characters systemd itself
+// accepts. No caller string reaches a shell or an option position.
+static int valid_unit_name(const char *s) {
+    if (!s || !*s || strlen(s) > MAX_UNIT_LEN || *s == '-') return 0;
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        if (!(isalnum(*p) || *p == '_' || *p == '.' || *p == '@' ||
+              *p == ':' || *p == '-' || *p == '\\')) return 0;
+    }
+    return 1;
+}
+
+// Copy a string parameter only when it really is a string and fits.
+static int param_string(json_object *params, const char *key, char *buf,
+                        size_t bufsz, int *present) {
+    json_object *v = NULL;
+    *present = 0;
+    if (!params || !json_object_object_get_ex(params, key, &v)) return 1;
+    if (json_object_get_type(v) != json_type_string) return 0;
+    const char *s = json_object_get_string(v);
+    size_t n = s ? strlen(s) : 0;
+    if (n >= bufsz) return 0;
+    memcpy(buf, s, n + 1);
+    *present = 1;
+    return 1;
+}
+
+static int parse_lines(json_object *params, int *lines) {
+    json_object *v = NULL;
+    *lines = 100;
+    if (!params || !json_object_object_get_ex(params, "lines", &v)) return 1;
+    if (json_object_get_type(v) != json_type_int) return 0;
+    int64_t n = json_object_get_int64(v);
+    if (n < 1 || n > 1000) return 0;
+    *lines = (int)n;
+    return 1;
+}
+
+static const char *const UNIT_PROPERTIES[] = {
+    "LoadState", "ActiveState", "SubState", "MainPID", "ExecMainStatus",
+    "Result", "Description", "FragmentPath", "ActiveEnterTimestamp",
+    "NRestarts", NULL
+};
+
+static json_object *diag_command(const char *const argv[], int as_json) {
+    char out[DIAG_OUTPUT_MAX];
+    int rc = run_capture_timeout(argv, out, sizeof(out), DIAG_TIMEOUT_MS);
+    json_object *o = json_object_new_object();
+    json_object_object_add(o, "exitCode", json_object_new_int(rc));
+    if (as_json) {
+        json_object *data = json_tokener_parse(out);
+        if (data) json_object_object_add(o, "data", data);
+        else json_object_object_add(o, "text", json_object_new_string(out));
+    } else {
+        json_object_object_add(o, "text", json_object_new_string(out));
+    }
+    return o;
+}
+
 static json_object *dispatch(json_object *req) {
     json_object *params = NULL;
     const char *method = jstr(req, "method");
@@ -431,6 +554,27 @@ static json_object *dispatch(json_object *req) {
         json_object *interfaces = json_object_new_array();
         json_object_array_add(interfaces, json_object_new_string("io.mjolnir.Fleet"));
         json_object_object_add(o, "interfaces", interfaces);
+        static const char *const methods[] = {
+            "org.varlink.service.GetInfo",
+            "io.mjolnir.Fleet.Status",
+            "io.mjolnir.Fleet.WifiStatus",
+            "io.mjolnir.Fleet.Attestation",
+            "io.mjolnir.Fleet.JournalTail",
+            "io.mjolnir.Fleet.UnitStatus",
+            "io.mjolnir.Fleet.BootcStatus",
+            "io.mjolnir.Fleet.KubeadmPreflight",
+            "io.mjolnir.Fleet.NetworkChecks",
+            "io.mjolnir.Fleet.FactoryReset",
+            "io.mjolnir.Fleet.Upgrade",
+            "io.mjolnir.Fleet.ClearRebootLock",
+            "io.mjolnir.Fleet.Reboot",
+            "io.mjolnir.Fleet.RotateJoinToken",
+            NULL
+        };
+        json_object *list = json_object_new_array();
+        for (int i = 0; methods[i]; i++)
+            json_object_array_add(list, json_object_new_string(methods[i]));
+        json_object_object_add(o, "methods", list);
         return o;
     }
     if (!strcmp(method, "io.mjolnir.Fleet.Status")) {
@@ -439,6 +583,110 @@ static json_object *dispatch(json_object *req) {
         return j;
     }
     if (!strcmp(method, "io.mjolnir.Fleet.Attestation")) return mjolnir_attestation();
+
+    if (!strcmp(method, "io.mjolnir.Fleet.JournalTail")) {
+        int lines;
+        if (!parse_lines(params, &lines))
+            return diag_error("InvalidArguments", "lines must be an integer from 1 to 1000");
+        char lbuf[16];
+        snprintf(lbuf, sizeof(lbuf), "%d", lines);
+        const char *argv[6];
+        int n = 0;
+        argv[n++] = "/usr/bin/journalctl";
+        argv[n++] = "--no-pager";
+        argv[n++] = "-n";
+        argv[n++] = lbuf;
+        char unit[MAX_UNIT_LEN + 1];
+        int has_unit = 0;
+        if (!param_string(params, "unit", unit, sizeof(unit), &has_unit) ||
+            (has_unit && !valid_unit_name(unit)))
+            return diag_error("InvalidArguments", "unit must be a valid systemd unit name");
+        char ubuf[MAX_UNIT_LEN + 16];
+        if (has_unit) {
+            snprintf(ubuf, sizeof(ubuf), "--unit=%s", unit);
+            argv[n++] = ubuf;
+        }
+        argv[n] = NULL;
+        char out[DIAG_OUTPUT_MAX];
+        int rc = run_capture_timeout(argv, out, sizeof(out), DIAG_TIMEOUT_MS);
+        json_object *o = json_object_new_object();
+        json_object_object_add(o, "exitCode", json_object_new_int(rc));
+        json_object_object_add(o, "lines", json_object_new_int(lines));
+        json_object_object_add(o, "output", json_object_new_string(out));
+        return o;
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.UnitStatus")) {
+        char unit[MAX_UNIT_LEN + 1];
+        int has_unit = 0;
+        if (!param_string(params, "unit", unit, sizeof(unit), &has_unit) ||
+            !has_unit || !valid_unit_name(unit))
+            return diag_error("InvalidArguments", "unit is required and must be a valid unit name");
+        char props[1024] = "LoadState,ActiveState,SubState,MainPID,ExecMainStatus,Result";
+        json_object *requested = NULL;
+        if (params && json_object_object_get_ex(params, "properties", &requested)) {
+            if (json_object_get_type(requested) != json_type_array)
+                return diag_error("InvalidArguments", "properties must be an array");
+            int count = json_object_array_length(requested);
+            if (count < 1 || count > 16)
+                return diag_error("InvalidArguments", "properties must hold 1 to 16 names");
+            props[0] = '\0';
+            for (int i = 0; i < count; i++) {
+                json_object *item = json_object_array_get_idx(requested, i);
+                if (json_object_get_type(item) != json_type_string)
+                    return diag_error("InvalidArguments", "property names must be strings");
+                const char *name = json_object_get_string(item);
+                int allowed = 0;
+                for (int k = 0; UNIT_PROPERTIES[k]; k++)
+                    if (!strcmp(name, UNIT_PROPERTIES[k])) { allowed = 1; break; }
+                if (!allowed)
+                    return diag_error("InvalidArguments", "property is not on the allowlist");
+                if (i) strncat(props, ",", sizeof(props) - strlen(props) - 1);
+                strncat(props, name, sizeof(props) - strlen(props) - 1);
+            }
+        }
+        char pflag[sizeof(props) + 16];
+        snprintf(pflag, sizeof(pflag), "--property=%s", props);
+        const char *argv[] = { "/usr/bin/systemctl", "show", unit, pflag, NULL };
+        char out[DIAG_OUTPUT_MAX];
+        int rc = run_capture_timeout(argv, out, sizeof(out), DIAG_TIMEOUT_MS);
+        json_object *o = json_object_new_object();
+        json_object_object_add(o, "exitCode", json_object_new_int(rc));
+        json_object_object_add(o, "output", json_object_new_string(out));
+        return o;
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.BootcStatus")) {
+        const char *argv[] = { "/usr/bin/bootc", "status", "--json", NULL };
+        char out[DIAG_OUTPUT_MAX];
+        int rc = run_capture_timeout(argv, out, sizeof(out), DIAG_TIMEOUT_MS);
+        json_object *o = json_object_new_object();
+        json_object_object_add(o, "exitCode", json_object_new_int(rc));
+        json_object *data = json_tokener_parse(out);
+        if (data) json_object_object_add(o, "status", data);
+        else json_object_object_add(o, "text", json_object_new_string(out));
+        return o;
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.KubeadmPreflight")) {
+        // Verified read-only for kubeadm 1.37.2: the preflight phase runs
+        // checks only, and --dry-run keeps it from applying any change.
+        const char *argv[] = {
+            "/usr/bin/kubeadm", "init", "phase", "preflight",
+            "--config", "/etc/mjolnir/kubeadm-init.yaml", "--dry-run", NULL
+        };
+        return diag_command(argv, 0);
+    }
+    if (!strcmp(method, "io.mjolnir.Fleet.NetworkChecks")) {
+        const char *addr[] = { "/usr/bin/ip", "-j", "addr", NULL };
+        const char *route[] = { "/usr/bin/ip", "-j", "route", NULL };
+        const char *listen[] = { "/usr/bin/ss", "-tuln", NULL };
+        const char *dns[] = { "/usr/bin/resolvectl", "status", NULL };
+        json_object *o = json_object_new_object();
+        json_object_object_add(o, "addresses", diag_command(addr, 1));
+        json_object_object_add(o, "routes", diag_command(route, 1));
+        json_object_object_add(o, "listening", diag_command(listen, 0));
+        json_object_object_add(o, "dns", diag_command(dns, 0));
+        json_object_object_add(o, "wifi", build_wifi());
+        return o;
+    }
     if (!strcmp(method, "io.mjolnir.Fleet.FactoryReset")) {
         // Explicit confirmation is mandatory: a stray call must never wipe a node.
         const char *confirm = jstr(params, "confirm");

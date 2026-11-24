@@ -64,7 +64,9 @@ CONTAINER=oci
    from credentials and execs `kubeadm join`.
 8. Updates are `bootc upgrade --download-only`; a staged update sets
    `/run/reboot-required`. **kured** (pinned DaemonSet, signal reboot method)
-   drains the node and reboots it under a cluster-wide lock annotation.
+   drains the node and reboots it under a cluster-wide lock annotation. bootc
+   rolls back a staged deployment that fails to come up, so no separate
+   rollback mechanism is needed.
 
 ## 4. Enforcing "no shell / no SSH / no interpreters"
 

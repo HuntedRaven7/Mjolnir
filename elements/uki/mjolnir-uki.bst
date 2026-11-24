@@ -70,6 +70,8 @@ config:
     objcopy -O binary -j .cmdline "$WORK/mjolnir.efi" "$WORK/cmdline.txt"
     grep -q 'composefs' "$WORK/cmdline.txt"
     grep -q 'systemd.volatile=yes' "$WORK/cmdline.txt"
+    grep -q 'console=ttyS0,115200' "$WORK/cmdline.txt"
+    grep -q 'systemd.journald.forward_to_console=1' "$WORK/cmdline.txt"
     install -Dm644 "$WORK/mjolnir.efi" \
       "%{install-root}/boot/EFI/Linux/mjolnir-${kver}.efi"
 

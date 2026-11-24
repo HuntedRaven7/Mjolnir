@@ -17,6 +17,7 @@ from pathlib import Path
 PSK = re.compile(r"^[0-9a-fA-F]{64}$")
 CA_HASH = re.compile(r"^sha256:[0-9a-fA-F]{32,}$")
 ENDPOINT = re.compile(r"^[^:\s]+:\d{1,5}$")
+JOURNAL_SOCKET = re.compile(r"^\S{1,255}$")
 
 
 def write_secret(directory: Path, name: str, value: str) -> None:
@@ -37,6 +38,8 @@ def main() -> int:
     ap.add_argument("--wifi-ssid")
     ap.add_argument("--wifi-psk")
     ap.add_argument("--tls-ca", type=Path, help="PEM CA for varlink mTLS client verification")
+    ap.add_argument("--journal-forward-socket",
+                    help="journal export socket address (journal.forward_to_socket)")
     ap.add_argument("--registry-user")
     ap.add_argument("--registry-token")
     args = ap.parse_args()
@@ -58,6 +61,8 @@ def main() -> int:
         errors.append("--wifi-psk must be exactly 64 hex characters")
     if args.tls_ca and not args.tls_ca.is_file():
         errors.append(f"--tls-ca file not found: {args.tls_ca}")
+    if args.journal_forward_socket and not JOURNAL_SOCKET.fullmatch(args.journal_forward_socket):
+        errors.append("--journal-forward-socket must be one address with no whitespace")
     if args.registry_user and not args.registry_token:
         errors.append("--registry-token is required with --registry-user")
     if args.registry_token and not args.registry_user:
@@ -79,6 +84,7 @@ def main() -> int:
     write_secret(args.out, "mjolnir.control-plane-endpoint", args.endpoint)
     write_secret(args.out, "mjolnir.wifi-ssid", args.wifi_ssid)
     write_secret(args.out, "mjolnir.wifi-psk", args.wifi_psk)
+    write_secret(args.out, "journal.forward_to_socket", args.journal_forward_socket)
     write_secret(args.out, "registry-user", args.registry_user)
     write_secret(args.out, "registry-token", args.registry_token)
     if args.tls_ca:
