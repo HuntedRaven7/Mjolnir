@@ -34,7 +34,7 @@ jobs:
         uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
         with:
           cluster_name: mjolnir-bootstrap
-          version: v0.27.0
+          version: v0.33.0
 
       - name: Run multi-node propagation test
         run: bash testsuite/multinode/test.sh
