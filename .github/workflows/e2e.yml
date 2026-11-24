@@ -93,6 +93,16 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
         run: just cache-pull
 
+      # The rolling :latest BST cache may hold boot artifacts from a different
+      # graph. A stale UKI/rootfs pair embeds a composefs digest that bootc
+      # cannot reproduce at install time. Rebuild those three elements locally.
+      - name: Rebuild boot artifacts (PR only)
+        if: github.event_name == 'pull_request' || inputs.local_build
+        run: |
+          for element in oci/mjolnir.bst uki/mjolnir-uki.bst oci/rootfs.bst; do
+            just bst artifact delete "$element" >/dev/null 2>&1 || true
+          done
+
       - name: Build image locally (PR only)
         if: github.event_name == 'pull_request' || inputs.local_build
         env:
