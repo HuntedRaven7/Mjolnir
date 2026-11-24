@@ -47,10 +47,14 @@ config:
     depmod -a "${version}"
     mkdir -p "%{install-root}/usr/lib/modules"
     cp -a "/usr/lib/modules/${version}" "%{install-root}/usr/lib/modules/"
-    dracut --no-hostonly --zstd --reproducible --no-machineid \
+    # Keep dracut's diagnostics visible when BST truncates the build log.
+    if ! dracut --no-hostonly --zstd --reproducible --no-machineid \
            --kver "${version}" \
            --kernel-image "/usr/lib/modules/${version}/vmlinuz" \
-           --fstab --verbose -f /initramfs.img
+           --fstab --verbose -f /initramfs.img > /tmp/dracut.log 2>&1; then
+      tail -80 /tmp/dracut.log >&2
+      exit 1
+    fi
     install -Dm644 /initramfs.img \
       "%{install-root}/usr/lib/modules/${version}/initramfs.img"
     depmod -b "%{install-root}/usr" -a "${version}"

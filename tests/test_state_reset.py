@@ -46,11 +46,11 @@ def check() -> list[str]:
         errors.append("var-lib-mjolnir.mount: does not use the discoverable label")
 
     dracut = text("files/config/dracut/50-mjolnir-tpm2.conf")
-    for module in ("crypt", "tpm2-tss"):
-        if module not in dracut:
-            errors.append(f"dracut config: missing {module} module")
-    if "/etc/crypttab" not in dracut:
-        errors.append("dracut config: crypttab is not included in the initramfs")
+    if "add_dracutmodules+=\" crypt " not in dracut:
+        errors.append("dracut config: missing crypt module")
+    for item in ("/etc/crypttab", "libcryptsetup-token-systemd-tpm2.so"):
+        if item not in dracut:
+            errors.append(f"dracut config: {item} is not included in the initramfs")
 
     initramfs = text("elements/kernel/initramfs.bst")
     for dep in ("components/cryptsetup.bst", "components/tpm2-tss.bst"):
