@@ -1,0 +1,16 @@
+[Unit]
+Description=Persistent kubeadm etcd data
+DefaultDependencies=no
+Conflicts=umount.target
+Requires=var-lib-mjolnir.mount
+After=var-lib-mjolnir.mount
+Before=local-fs.target umount.target
+
+[Mount]
+What=/var/lib/mjolnir/var/lib/etcd
+Where=/var/lib/etcd
+Type=none
+Options=bind
+
+[Install]
+WantedBy=local-fs.target

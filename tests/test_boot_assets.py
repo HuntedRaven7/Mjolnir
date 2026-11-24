@@ -33,6 +33,7 @@ required = [
     "/usr/lib/bootc/kargs.d/50-volatile.toml",
     "/usr/lib/repart.d/20-mjolnir-state.conf",
     "/usr/lib/systemd/system/var-lib-mjolnir.mount",
+    "/usr/lib/systemd/system/var-lib-etcd.mount",
     "/usr/lib/systemd/system/var-lib-containerd.mount",
     "/usr/lib/systemd/system/var-lib-kubelet.mount",
     "/usr/lib/systemd/system/var-log-journal.mount",

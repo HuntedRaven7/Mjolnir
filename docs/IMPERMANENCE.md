@@ -30,6 +30,7 @@ by `systemd-tmpfiles` rules in `/usr/lib/tmpfiles.d/mjolnir-volatile.conf`
 | `/var/lib/containerd` | CRI content store, metadata and snapshots (all-or-nothing) |
 | `/var/lib/kubelet` | TLS bootstrap certs, config, CPU/device manager checkpoints |
 | `/var/lib/cni` | CNI IPAM leases |
+| `/var/lib/etcd` | kubeadm's local etcd database; without this the control plane loses cluster state on every reboot |
 | `/var/log/journal` | Persistent journal (keyed by the stable machine-id) |
 | `/etc/kubernetes` | kubeadm-generated configuration |
 
