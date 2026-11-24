@@ -6,7 +6,8 @@ StartLimitIntervalSec=120
 StartLimitBurst=2
 # Do not wait for network-online.target: on a machine with no working network
 # that target blocks for ~90s and the installer looks like it never starts.
-# The helper retries a failed pull via Restart=on-failure.
+# A failed install must surface its first error, not a cascade of retries that
+# leaves stale filesystem signatures behind.
 After=network.target
 Wants=network.target
 
@@ -20,8 +21,7 @@ ExecStart=/opt/mjolnir-install --yes --config /etc/mjolnir-installer.json
 # installer can never block waiting for a console that does not exist.
 StandardOutput=journal+console
 StandardError=journal+console
-Restart=on-failure
-RestartSec=2s
+Restart=no
 
 [Install]
 WantedBy=multi-user.target

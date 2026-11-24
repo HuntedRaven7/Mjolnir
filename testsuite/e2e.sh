@@ -63,7 +63,11 @@ if [ "${SKIP_PULL:-0}" = "1" ]; then
   OWNER="${OWNER,,}"
   INSTALL_IMAGE="ghcr.io/${OWNER}/mjolnir:${TAG}"
   echo "${GH_TOKEN:-}" | podman login ghcr.io -u "${GITHUB_ACTOR:-HuntedRaven7}" --password-stdin
-  podman push "$IMAGE" "docker://${INSTALL_IMAGE}"
+  # bootc's composefs backend cannot read zstd:chunked layers ("Unexpected EOF
+  # in splitstream"). Force plain gzip on the temporary tag even if the local
+  # image carries chunked/partial layers from the build sandbox.
+  podman push --compression-format gzip --force-compression \
+    "$IMAGE" "docker://${INSTALL_IMAGE}"
 fi
 
 echo "==> building installer ISO for ${INSTALL_IMAGE}"
