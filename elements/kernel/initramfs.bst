@@ -31,7 +31,7 @@ config:
   commands:
   - mkdir -p /fakecap /tmp /var/tmp /run
   - |
-    set -eu
+    set -eux
     version="$(ls -1 /usr/lib/modules | head -n1)"
     test -n "${version}"
     test -f "/usr/lib/modules/${version}/vmlinuz"
