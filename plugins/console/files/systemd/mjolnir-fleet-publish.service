@@ -2,6 +2,8 @@
 Description=Publish Mjolnir fleet status to Kubernetes
 After=network-online.target
 Wants=network-online.target
+# Publishing needs the fleet credential delivered at provisioning time.
+ConditionPathExists=/run/credentials/@system/fleet-kubeconfig
 
 [Service]
 Type=oneshot

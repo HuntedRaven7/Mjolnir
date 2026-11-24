@@ -3,6 +3,9 @@ Description=kubelet: Kubernetes node agent
 Documentation=https://kubernetes.io/docs/home/
 After=containerd.service
 Requires=containerd.service
+# An unprovisioned node has no kubeadm config. Do not spin in a restart loop
+# until a role credential arrives.
+ConditionPathExists=/var/lib/kubelet/config.yaml
 
 [Service]
 ExecStartPre=/usr/bin/mkdir -p /var/lib/kubelet /var/lib/kubelet/volumeplugins

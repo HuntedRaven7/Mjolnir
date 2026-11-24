@@ -120,6 +120,16 @@ jobs:
       - name: bootc lint
         run: just lint
 
+      # The install is the digest proof: bootc regenerates the composefs digest
+      # from the final OCI rootfs and refuses to install unless it matches the
+      # one embedded in the signed UKI. The VM boot then checks the signed
+      # cmdline, bootc status, failed units and image provenance.
+      - name: Install and boot test (OVMF)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 ovmf binutils
+          just boot-test
+
       - name: Export image for scanning
         run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest
 

@@ -1,10 +1,20 @@
 kind: manual
 description: |
-  SIGNING-ONLY. Builds a signed, composefs-digest-pinned UKI with bootc's
-  ukify integration. The digest is computed from the exact final rootfs and
-  baked into the signed .cmdline section, so Secure Boot trusts the root.
-  NEVER add this element to a runtime stack (its artifact contains key material
-  via boot-keys.bst). The resulting EFI is copied into the OCI by oci/mjolnir.bst.
+  SIGNING-ONLY. Builds two signed, composefs-digest-pinned UKIs with bootc's
+  ukify integration. Both digest values are computed from oci/rootfs.bst, the
+  exact tree that build-oci packages, so `bootc install` reproduces them from
+  the installed rootfs. The digests live in the signed `.cmdline` section only.
+
+  The default UKI is signed with DB/VENDOR and is handed to bootc via
+  /boot/EFI/Linux. The debug UKI is signed with a distinct DEBUG key, has its
+  own EFIname and title, and is staged under /boot/mjolnir-debug for an
+  operator to register as an additional systemd-boot entry. It is deliberately
+  not a second bootc-managed UKI: bootc rejects two composefs cmdlines and
+  names every UKI it installs after the deployment digest.
+
+  NEVER add this element to a runtime stack (its artifact is built from
+  signing-only dependencies). Only the signed PE binaries are copied into the
+  final image by oci/mjolnir.bst.
 
 build-depends:
 - base/sandbox-tools.bst
@@ -34,16 +44,14 @@ config:
     set -eu
     # The BST sandbox root is FUSE and cannot read xattrs (listxattr returns
     # ENOTSUP), which bootc's composefs scanner requires. Copy the rootfs onto
-    # /tmp (tmpfs) where xattrs work. The composefs transform only keeps
-    # security.capability, so tmpfs's lack of persistent security.* xattrs is
-    # harmless. /var/tmp is needed by bootc for its temp repo; our patched
-    # bootc honours TMPDIR, which we point at the writable /tmp.
+    # /tmp (tmpfs) where xattrs work. /var/tmp is needed by bootc for its temp
+    # repo; our patched bootc honours TMPDIR, which we point at the writable /tmp.
     export TMPDIR=/tmp
     WORK=/tmp/mjolnir-uki
     ROOTFS="$WORK/rootfs"
     mkdir -p "$WORK" "${ROOTFS}" "$WORK/keys" \
       "%{install-root}/boot/EFI/Linux" \
-      "%{install-root}/usr/lib/systemd/boot/efi" "%{install-root}/usr/share/mjolnir"
+      "%{install-root}/boot/mjolnir-debug"
     # Staged deps are read-only; copy keys to writable /tmp and fix their mode
     # (systemd-sbsign refuses overly permissive private keys).
     cp /boot-keys/*.key /boot-keys/*.crt /boot-keys/*.pub "$WORK/keys/"
@@ -58,9 +66,10 @@ config:
     test -f "$KDIR/vmlinuz"
     test -f "$KDIR/initramfs.img"
 
-    # bootc computes the composefs digest of the exact rootfs and generates the
-    # `.cmdline` (v1 digest + v2 fallback + kargs.d entries such as
-    # systemd.volatile=yes). No --karg may be passed at install time.
+    # bootc computes the composefs digest of the exact final rootfs and
+    # generates the `.cmdline` (V1 digest + V2 fallback + kargs.d entries such
+    # as systemd.volatile=yes and console=ttyS0). No --karg may be passed at
+    # install time, because that would bypass the signature.
     bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
       -- --output "$WORK/mjolnir.efi" \
       --uname "${kver}" \
@@ -81,13 +90,47 @@ config:
     cmp "$WORK/pcrpkey.pem" "${WORK}/keys/PCR.pub"
     grep -q '"sig"' "$WORK/pcrsig.json"
 
-    # Assert the signature and that the digest was baked into the cmdline.
+    # The debug UKI pins the same verified root but is signed by a different
+    # key that is never enrolled in firmware. Its own os-release gives it a
+    # distinct systemd-boot title.
+    cat > "$WORK/debug-os-release" <<EOF
+    ID=mjolnir
+    ID_LIKE=fedoraproject
+    NAME="Mjolnir"
+    PRETTY_NAME="Mjolnir (debug)"
+    VERSION_ID="0"
+    VARIANT_ID=debug
+    EOF
+    bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
+      -- --output "$WORK/mjolnir-debug.efi" \
+      --uname "${kver}-debug" \
+      --os-release=@"${WORK}/debug-os-release" \
+      --signtool=systemd-sbsign --no-sign-kernel \
+      --secureboot-private-key="${WORK}/keys/DEBUG.key" \
+      --secureboot-certificate="${WORK}/keys/DEBUG.crt"
+
+    # Assert both signatures and that the same digest was baked into both
+    # cmdlines. The digest is written under /boot, which composefs empties
+    # before hashing, so publishing it cannot make the pin self-referential.
     sbverify --cert "${WORK}/keys/VENDOR.crt" "$WORK/mjolnir.efi"
-    objcopy -O binary -j .cmdline "$WORK/mjolnir.efi" "$WORK/cmdline.txt"
-    grep -q 'composefs' "$WORK/cmdline.txt"
-    grep -q 'systemd.volatile=yes' "$WORK/cmdline.txt"
-    grep -q 'console=ttyS0,115200' "$WORK/cmdline.txt"
-    grep -q 'systemd.journald.forward_to_console=1' "$WORK/cmdline.txt"
+    sbverify --cert "${WORK}/keys/DEBUG.crt" "$WORK/mjolnir-debug.efi"
+    for uki in mjolnir mjolnir-debug; do
+      objcopy -O binary -j .cmdline "$WORK/${uki}.efi" "$WORK/${uki}.cmdline"
+      grep -q 'composefs.digest=v1-sha512-12:' "$WORK/${uki}.cmdline"
+      grep -q 'systemd.volatile=yes' "$WORK/${uki}.cmdline"
+      # Gates from the diagnostics stack apply to both signed UKIs.
+      grep -q 'console=ttyS0,115200' "$WORK/${uki}.cmdline"
+      grep -q 'systemd.journald.forward_to_console=1' "$WORK/${uki}.cmdline"
+    done
+    PRIMARY_DIGEST=$(sed -n 's/.*composefs.digest=v1-sha512-12:\([0-9a-f]*\).*/\1/p' "$WORK/mjolnir.cmdline")
+    DEBUG_DIGEST=$(sed -n 's/.*composefs.digest=v1-sha512-12:\([0-9a-f]*\).*/\1/p' "$WORK/mjolnir-debug.cmdline")
+    test -n "$PRIMARY_DIGEST"
+    test "$PRIMARY_DIGEST" = "$DEBUG_DIGEST"
+    # A distinct signing key must produce a distinct PE binary.
+    if cmp -s "$WORK/mjolnir.efi" "$WORK/mjolnir-debug.efi"; then
+      echo "debug UKI is byte-identical to the default UKI" >&2
+      exit 1
+    fi
 
     # Publish the public PCR artifacts in this signing-only artifact. They are
     # also embedded in the signed UKI (and exposed to the initrd by systemd-stub),
@@ -99,15 +142,16 @@ config:
       "%{install-root}/usr/share/mjolnir/tpm2-pcr-signature.json"
     install -Dm644 "$WORK/mjolnir.efi" \
       "%{install-root}/boot/EFI/Linux/mjolnir-${kver}.efi"
+    install -Dm644 "$WORK/mjolnir-debug.efi" \
+      "%{install-root}/boot/mjolnir-debug/mjolnir-debug-${kver}.efi"
+    cat > "%{install-root}/boot/mjolnir-debug/mjolnir-debug.conf" <<EOF
+    title Mjolnir (debug)
+    efi /EFI/Linux/mjolnir-debug-${kver}.efi
+    EOF
 
-    # Sign systemd-boot so Secure Boot can load the loader; bootctl prefers
-    # the .signed variant.
-    /usr/lib/systemd/systemd-sbsign sign \
-      --private-key="${WORK}/keys/VENDOR.key" \
-      --certificate="${WORK}/keys/VENDOR.crt" \
-      --output="%{install-root}/usr/lib/systemd/boot/efi/systemd-boot%{efi-arch}.efi.signed" \
-      "/usr/lib/systemd/boot/efi/systemd-boot%{efi-arch}.efi"
-
-    # The pinned composefs digest, for attestation/verification.
+    # The pinned composefs digest, for attestation/verification. Stored under
+    # /boot so it is outside the composefs image and cannot change the digest.
     bootc container compute-composefs-digest "$ROOTFS" > \
-      "%{install-root}/usr/share/mjolnir/composefs-digest.txt"
+      "%{install-root}/boot/mjolnir-composefs-digest.txt"
+    DIGEST=$(cat "%{install-root}/boot/mjolnir-composefs-digest.txt")
+    grep -q "${DIGEST}" "$WORK/mjolnir.cmdline"

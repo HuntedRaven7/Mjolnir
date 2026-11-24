@@ -10,11 +10,12 @@ all with **no shell, no SSH daemon and no language interpreters** in the base
 image or in any active layer.
 
 > Status: **alpha**. The x86_64 sealed image builds and passes `bootc container
-> lint`, content assertions, and the kind-based multinode propagation test. The
-> image ships a **signed, composefs-digest-pinned UKI** (Secure Boot ready; key
-> enrollment is a manual hardware step). A full disk-install/QEMU boot test has
-> not yet run in CI; see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the
-> open issues and [docs/BUILD.md](docs/BUILD.md) for the branch/release model.
+> lint`, content assertions, the kind-based multinode propagation test, and a
+> CI install + OVMF boot test. The image ships a **signed,
+> composefs-digest-pinned UKI** (Secure Boot ready; key enrollment is a manual
+> hardware step) plus an opt-in, separately signed debug UKI. See
+> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the remaining open issues and
+> [docs/BUILD.md](docs/BUILD.md) for the branch/release model.
 
 ## Design decisions
 
@@ -69,6 +70,7 @@ just lint           # bootc container lint
 just test           # content assertions (no shell/SSH/interpreters, no SUID, pins)
 just disk           # bootc install to-disk into a raw image
 just vm             # boot that image in QEMU
+just boot-test      # full install + OVMF boot proof (root, KVM, OVMF required)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for prerequisites and the
@@ -81,8 +83,9 @@ full pipeline.
 - `renovate.json` tracks GitHub Actions and pinned source versions.
 - `scripts/update_pins.py` and a weekly workflow recompute source hashes/refs;
   see [docs/UPDATES.md](docs/UPDATES.md).
-- `testsuite/` holds the kind-based multinode propagation test and the plugin
-  smoke test that run on `testing`. See [testsuite/README.md](testsuite/README.md).
+- `testsuite/` holds the kind-based multinode propagation test, the plugin
+  smoke test, and the install + OVMF boot proof that run in CI. See
+  [testsuite/README.md](testsuite/README.md).
   Provisioning installs the image with `bootc install to-disk` directly; Mjolnir
   does not ship a custom installer.
 

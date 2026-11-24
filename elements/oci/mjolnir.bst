@@ -1,9 +1,10 @@
 kind: script
 description: |
-  Final Mjolnir bootc OCI image. It consumes the sanitized rootfs from
-  oci/rootfs.bst (the exact tree whose composefs digest is pinned in the signed
-  UKI) and adds the signed boot artifacts before build-oci turns it into an OCI
-  layout with bootc labels.
+  Final Mjolnir bootc OCI image. It consumes the complete rootfs from
+  oci/rootfs.bst (the exact tree whose composefs digest is pinned in both
+  signed UKIs) and adds only /boot artifacts before build-oci turns it into an
+  OCI layout with bootc labels. composefs empties /boot before hashing, so the
+  added UKIs cannot invalidate the digest.
 
 build-depends:
 - base/sandbox-tools.bst
@@ -28,14 +29,14 @@ config:
     root=/rootfs
 
     # --- sealed boot: signed UKI with the composefs digest pinned -----------
-    # bootc's composefs backend detects /boot/EFI/Linux/*.efi and installs it
-    # to the ESP; the signed .cmdline carries the exact rootfs digest.
-    mkdir -p "${root}/boot/EFI/Linux"
+    # Only /boot is modified here. The signed systemd-boot loader is already
+    # part of oci/rootfs.bst, so the tree hashed by bootc is unchanged.
+    # bootc detects the single UKI in /boot/EFI/Linux and installs it to the
+    # ESP; the signed .cmdline carries the exact rootfs digest.
+    mkdir -p "${root}/boot/EFI/Linux" "${root}/boot/mjolnir-debug"
     cp -a /uki/boot/EFI/Linux/. "${root}/boot/EFI/Linux/"
-    mkdir -p "${root}/usr/lib/systemd/boot/efi"
-    cp -a /uki/usr/lib/systemd/boot/efi/. "${root}/usr/lib/systemd/boot/efi/"
-    mkdir -p "${root}/usr/share/mjolnir"
-    cp /uki/usr/share/mjolnir/composefs-digest.txt "${root}/usr/share/mjolnir/"
+    cp -a /uki/boot/mjolnir-debug/. "${root}/boot/mjolnir-debug/"
+    cp /uki/boot/mjolnir-composefs-digest.txt "${root}/boot/"
 
     # --- build the OCI layout -----------------------------------------------
     cd "%{install-root}"

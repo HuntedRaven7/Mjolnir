@@ -1,9 +1,13 @@
 kind: script
 description: |
-  Final Mjolnir root filesystem, before the signed UKI is added. Shared by
-  oci/mjolnir.bst (which builds the OCI) and uki/mjolnir-uki.bst (which must
-  compute the composefs digest of this exact tree). Kept as a single element so
-  the digester and the image cannot drift apart.
+  Final Mjolnir root filesystem. This element produces the exact tree that
+  build-oci packages, including the signed systemd-boot loader. uki/mjolnir-uki.bst
+  computes the composefs digest of this tree, so the digest bootc regenerates
+  from the installed OCI rootfs matches the one baked into the signed UKI.
+
+  Boot artifacts that bootc itself installs to the ESP live under /boot, which
+  composefs empties before computing the digest, so they cannot create a
+  self-referential digest.
 
 build-depends:
 - base/sandbox-tools.bst
@@ -12,6 +16,9 @@ build-depends:
 - filename: oci/layers/mjolnir.bst
   config:
     location: /layer
+- filename: uki/systemd-boot.bst
+  config:
+    location: /signed-boot
 
 variables:
   strip-binaries: ''
@@ -20,6 +27,13 @@ config:
   - |
     set -eu
     root=/layer
+
+    # --- signed bootloader ---------------------------------------------------
+    # Signing happens in its own signing-only element; only the resulting PE
+    # binary is copied here. It is part of /usr, so it must be present before
+    # the composefs digest is computed by uki/mjolnir-uki.bst.
+    mkdir -p "${root}/usr/lib/systemd/boot/efi"
+    cp -a /signed-boot/usr/lib/systemd/boot/efi/. "${root}/usr/lib/systemd/boot/efi/"
 
     # --- identity -----------------------------------------------------------
     mkdir -p "${root}/usr/lib" "${root}/etc"

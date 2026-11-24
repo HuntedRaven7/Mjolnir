@@ -101,8 +101,15 @@ disk size="32G":
       \
       "{{image_name}}:{{image_tag}}" \
       bootc install to-disk --composefs-backend --via-loopback /data/build/bootable.raw \
-        --filesystem btrfs --wipe --bootloader systemd \
-        --karg systemd.firstboot=no --karg quiet
+        --filesystem btrfs --wipe --bootloader systemd
+    # No --karg: a sealed UKI carries its whole cmdline in the signed
+    # .cmdline section, and bootc rejects install-time kargs for immutable boot.
+
+# Full install + OVMF boot proof. Requires root, KVM, QEMU and OVMF.
+boot-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exec bash "{{justfile_directory()}}/testsuite/boot/test-boot.sh" "{{image_name}}:{{image_tag}}"
 
 # Boot the raw disk image headlessly with a serial console.
 vm:

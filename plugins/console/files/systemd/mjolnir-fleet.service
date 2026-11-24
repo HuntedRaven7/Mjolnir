@@ -1,6 +1,7 @@
 [Unit]
 Description=Mjolnir fleet Varlink action service
 Documentation=https://github.com/HuntedRaven7/Mjolnir/tree/main/plugins/console
+ConditionPathExists=/run/credentials/@system/role
 
 [Service]
 Type=simple

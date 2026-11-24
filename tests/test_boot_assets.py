@@ -53,6 +53,9 @@ required = [
     "/usr/share/mjolnir/manifests/cilium/00-cilium.yaml",
     "/usr/lib/systemd/system/mjolnir-init.service",
     "/usr/lib/systemd/system/varlink-httpd.socket",
+    "/boot/mjolnir-composefs-digest.txt",
+    "/boot/mjolnir-debug/mjolnir-debug.conf",
+    "/usr/lib/bootc/kargs.d/40-console.toml",
 ]
 
 # Use podman mount from a created container to inspect the full tree quickly.
@@ -79,6 +82,21 @@ with tarfile.open(fileobj=io.BytesIO(out), mode="r:") as tf:
 errors = [f"missing {p}" for p in required if p.lstrip("/") not in names]
 if "usr/lib/systemd/system/mjolnir-reboot.timer" in names:
     errors.append("obsolete mjolnir-reboot.timer is still present (kured replaces it)")
+
+# The signed loader must be in the tree whose digest is pinned; the UKIs must
+# live under /boot, which composefs empties before hashing.
+loaders = [n for n in names if n.startswith("usr/lib/systemd/boot/efi/")
+           and n.endswith(".efi.signed")]
+if not loaders:
+    errors.append("missing signed systemd-boot loader")
+primary = [n for n in names if n.startswith("boot/EFI/Linux/") and n.endswith(".efi")]
+debug = [n for n in names if n.startswith("boot/mjolnir-debug/") and n.endswith(".efi")]
+if len(primary) != 1:
+    errors.append(f"expected one bootc-managed UKI, found {len(primary)}: {primary}")
+if len(debug) != 1:
+    errors.append(f"expected one debug UKI, found {len(debug)}: {debug}")
+if "usr/share/mjolnir/composefs-digest.txt" in names:
+    errors.append("composefs digest file inside the hashed rootfs is self-referential")
 
 kernels = [n for n in names if n.startswith("usr/lib/modules/") and n.endswith("/vmlinuz")]
 if not kernels:

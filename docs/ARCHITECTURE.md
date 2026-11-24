@@ -76,6 +76,26 @@ CONTAINER=oci
    Full reset requests a systemd factory reset; repart recreates the state
    partition and TPM enrollment repeats.
 
+### Sealed boot digest and the debug UKI
+
+`bootc install` regenerates the composefs digest from the final OCI rootfs and
+refuses to install unless it matches the digest in the signed UKI cmdline.
+`oci/rootfs.bst` therefore includes the signed systemd-boot loader before
+`uki/mjolnir-uki.bst` computes the digest, and `oci/mjolnir.bst` adds only
+`/boot` files afterwards. composefs empties `/boot` before hashing, so the UKIs
+themselves cannot invalidate their own pin. No `--karg` is passed at install
+time: the whole cmdline, including `systemd.volatile=yes` and the journal
+console kargs, is signed inside the UKI.
+
+A second, separately signed debug UKI is staged under `/boot/mjolnir-debug`
+with its own EFIname and `Mjolnir (debug)` title. It pins the same verified
+root but uses a DEBUG key that is never enrolled in firmware. It is not a
+bootc-managed layer or a second deployment: bootc rejects a second composefs
+cmdline in `/boot/EFI/Linux`. Provisioning registers the debug binary as an
+additional systemd-boot entry only when debugging is needed. Attestation
+reports every discovered `.efi` and prefers the default entry, so it does not
+depend on there being exactly one binary on the ESP.
+
 ## 4. Enforcing "no shell / no SSH / no interpreters"
 
 This is a build-time property, not a runtime policy.
@@ -170,11 +190,13 @@ a Varlink interface.
 
 ```text
 bst build oci/mjolnir.bst
-  → oci/rootfs.bst (sanitized rootfs; shared with the digester)
-  → uki/mjolnir-uki.bst (signed, digest-pinned UKI + signed systemd-boot)
-  → oci/mjolnir.bst (assemble OCI with boot artifacts)
+  → uki/boot-keys.bst + uki/systemd-boot.bst (signing-only)
+  → oci/rootfs.bst (final rootfs: sanitized tree + signed systemd-boot)
+  → uki/mjolnir-uki.bst (two signed UKIs pinning that exact tree)
+  → oci/mjolnir.bst (add /boot artifacts, build OCI)
   → podman load OCI archive
   → bootc container lint + content assertions
+  → bootc install to-disk + OVMF boot test (testsuite/boot/test-boot.sh)
   → chunka rechunk (projectbluefin/actions/bootc-build/chunka)
   → cosign sign + SBOM attestation (projectbluefin/actions)
   → trivy scan (projectbluefin/actions)
@@ -194,12 +216,12 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
 
 ## 11. Open issues
 
-- **The image has not yet been proven to boot.** The removed QEMU boot harness
-  never reached a successful install: `bootc install` could not reproduce the
-  composefs digest embedded in the signed UKI from the final OCI rootfs. A new
-  boot test must be built around `bootc install to-disk` directly and must
-  verify that the UKI digest and the installed rootfs agree. This is the highest
-  remaining risk.
+- The sealed boot path is now covered in CI. `testsuite/boot/test-boot.sh`
+  installs the built image with `bootc install to-disk`, checks the digest in
+  the installed signed UKI against one recomputed from the image, then boots
+  the disk under OVMF and checks the signed cmdline, `bootc status`, failed
+  units and image provenance. Real-hardware Secure Boot key enrollment and
+  `bootc upgrade` of a sealed deployment still need operator validation.
 - `quality.yml` (reproducibility, BST-native SBOM) has not yet gone green. The
   golden image diff now runs in `build.yml` on pushes to `testing` instead of
   on PRs.
