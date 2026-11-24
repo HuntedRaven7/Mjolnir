@@ -590,7 +590,6 @@ static int start_unit(const char *unit) {
     if (bus) sd_bus_unref(bus);
     return r < 0 ? -1 : 0;
 }
-}
 
 static json_object *dispatch(json_object *req) {
     json_object *params = NULL;
