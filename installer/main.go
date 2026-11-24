@@ -432,7 +432,7 @@ func install(c *config, disk string, r runner) error {
 		"--security-opt", "label=type:unconfined_t",
 		c.Image,
 		"bootc", "install", "to-disk",
-		"--composefs-backend", "--generic-image",
+		"--generic-image",
 	)
 	if c.Encrypted {
 		// Bind the root filesystem unlock to the machine's TPM2 device.
