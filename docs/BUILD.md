@@ -30,6 +30,23 @@ just vm           # boot that disk in QEMU with a serial console
 
 `just build` runs the build and export steps together.
 
+## CI verification scope
+
+Two static gates run on every PR; neither builds an image locally.
+
+- **Cilium kernel options** — `tests/test_kernel_config.py` reads the kernel
+  config script from the FSDK commit pinned in `include/versions.yml`. It checks
+  the BPF options Cilium needs and reports VXLAN as an accepted gap
+  (`--known-gap VXLAN` in `build.yml`): Cilium requests `tunnel-protocol: vxlan`,
+  but FSDK does not enable `CONFIG_VXLAN`. It does not check the built kernel,
+  loaded modules, or Cilium readiness; the boot test must cover those.
+- **aarch64** — the `validate-arm64` job checks the committed arm64 varlink
+  pin, confirms every arm64 source URL in `binaries-src.bst` still serves an
+  artifact, and resolves the aarch64 element graph. A missing source or changed
+  committed pin fails the job. It does **not** verify downloaded sha256 values
+  (BuildStream does that at fetch time), compile or link anything, build an
+  aarch64 OCI image, or boot it: the pinned `bst2` image cannot cross-compile.
+
 ## What the build does
 
 1. Junctions FSDK 26.08.4 at a pinned git ref.
@@ -65,9 +82,9 @@ Mjolnir follows the dakota-style two-branch model (adapted from
 | `stable` | Production pointer. Never rebuilt from source; updated by digest promotion only. | `:stable` |
 
 Development happens on `testing`. A successful build there publishes a
-keyless-signed `:testing` image and runs the blocking boot, content, plugin,
-multinode and quality gates. `main` is kept as a historical pointer and is not
-built or promoted.
+keyless-signed `:testing` image and runs the blocking content, plugin, multinode
+and quality gates. `main` is kept as a historical pointer and is not built or
+promoted.
 
 Stable is cut **on demand by a maintainer**, never on a schedule:
 
@@ -106,4 +123,5 @@ just bst artifact pull --deps none \
 - **A missing library after `bootc switch`** is usually a stale `ld.so.cache`;
   `ldconfig -r` must remain the last post-install step in `oci/rootfs.bst`.
 - **A node that never becomes Ready** usually means Cilium was not applied or
-  the kernel lacks the BPF/ vxlan options; see `docs/ARCHITECTURE.md`.
+  the kernel lacks the BPF/ VXLAN options; see `docs/ARCHITECTURE.md` and the
+  CI verification scope above.

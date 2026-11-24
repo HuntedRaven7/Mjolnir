@@ -96,8 +96,9 @@ This is a build-time property, not a runtime policy.
 - Firmware is included from FSDK; the deny-list of non-free firmware is
   intentional — only firmware reachable from FSDK is shipped.
 - Cilium is the CNI, replacing kube-proxy (`kubeProxyReplacement=true`).
-  Kernel options required by Cilium are provided by the FSDK kernel config;
-  this is validated in `tests/test_kernel_config.py`.
+  Kernel options required by Cilium come from the pinned FSDK kernel config;
+  `tests/test_kernel_config.py` checks the BPF options in CI. See section 10
+  for the VXLAN gap and what the checks do not cover.
 
 ## 6. Kubernetes (no k0s)
 
@@ -201,10 +202,15 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
   `attestation.verified` on a MjolnirNode. A running fleet controller still has
   to invoke it and supply the expected digests/PCR value.
 - Cilium and KubeStellar image digests must be refreshed when versions are bumped.
-- The FSDK kernel config needs Cilium's VXLAN/BPF options; verify with a boot test
-  before treating the image as usable.
+- BPF options are checked statically against the pinned FSDK config script by
+  `tests/test_kernel_config.py`. VXLAN is a known gap: Cilium uses
+  `tunnel-protocol: vxlan` but FSDK does not enable `CONFIG_VXLAN`. CI accepts
+  it via `--known-gap VXLAN`, and a boot test must confirm module availability
+  before the image is treated as usable. See `docs/BUILD.md`.
 - The x86_64 image builds and lints cleanly. An aarch64 image has never been
-  built (the arm64 varlink binary pin is present, but CI is x86_64-only).
+  built. CI checks the committed arm64 varlink pin, the availability of every
+  arm64 source URL, and the aarch64 element graph, but does not compile or
+  produce an aarch64 image: the pinned `bst2` image cannot cross-compile.
 - Secure Boot key **enrollment** on real hardware is a manual, out-of-band step.
   The image ships a signed UKI plus a signed systemd-boot and `bootctl` accepts
   the DB key from `loader/keys/auto/` in setup mode; see `docs/SECURITY.md`.
