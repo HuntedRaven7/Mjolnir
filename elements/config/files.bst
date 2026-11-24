@@ -31,7 +31,8 @@ config:
       "${root}/usr/lib/tmpfiles.d/mjolnir-volatile.conf"
     install -Dm644 /config/systemd/var-lib-mjolnir.mount \
       "${root}/usr/lib/systemd/system/var-lib-mjolnir.mount"
-    for m in var-lib-mjolnir etc-machine-id etc-NetworkManager-system-connections \
+    for m in var-lib-mjolnir var-lib-etcd etc-machine-id \
+             etc-NetworkManager-system-connections \
              var-lib-containerd var-lib-kubelet var-log-journal var-lib-cni \
              etc-kubernetes; do
       if [ "${m}" != "var-lib-mjolnir" ]; then
