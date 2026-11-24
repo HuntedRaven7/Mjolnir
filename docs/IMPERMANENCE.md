@@ -38,8 +38,8 @@ The whole partition is LUKS2. `systemd-repart` creates it with an empty
 first-boot slot; `mjolnir-state-enroll.service` replaces that slot with a TPM2
 enrollment bound to PCR 7 and a signed PCR 11 policy. A new signed UKI keeps
 the policy valid because the policy trusts signatures, not a fixed PCR value.
-The initramfs carries the `crypt` and `tpm2-tss` dracut modules so unlock and
-enrollment work before `/usr` is available.
+The initramfs carries the `crypt` dracut module and the systemd TPM2 cryptsetup
+token plugin so unlock and enrollment work before `/usr` is available.
 
 ## Reset scopes
 

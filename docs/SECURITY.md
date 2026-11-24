@@ -117,8 +117,9 @@ initrd, so a UKI upgrade keeps unsealing the state without re-enrollment. Only
 public key material is published. No key is stored in the repository or in the
 runtime image's configuration.
 
-The initramfs is built with the dracut `crypt` and `tpm2-tss` modules plus the
-systemd TPM2 cryptsetup token plugin, and includes the build-time `/etc/crypttab`.
+The initramfs is built with the dracut `crypt` module and the systemd TPM2
+cryptsetup token plugin, whose ELF dependencies pull in `tpm2-tss`. It includes
+the build-time `/etc/crypttab`.
 
 ## Factory reset
 
