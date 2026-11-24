@@ -132,7 +132,8 @@ machine. It requires a TPM2-sealed `reset-confirm` credential matching the
 scope, discovers the control-plane topology, and only then cordons and drains
 the node with `kubectl` before removing an explicit path allowlist:
 
-- `node-identity`: kubelet configs and certs, `/etc/machine-id`, WiFi profiles.
+- `node-identity`: kubelet configs and certs, the state partition's
+  `/etc/machine-id` and WiFi profiles (the bind-mount sources, not the mounts).
 - `etcd-data`: `/var/lib/etcd`, its persistent backing store, and control-plane
   PKI plus kubeadm kubeconfigs.
 - `full`: both of the above, then `mjolnir-factory-reset.target`; systemd-repart
