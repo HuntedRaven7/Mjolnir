@@ -55,7 +55,7 @@ jobs:
 
       - uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.3'
+          cosign-release: 'v2.6.5'
 
       # Resolve the candidate commit and confirm a successful build exists for
       # that exact SHA. With no override this is testing HEAD.
