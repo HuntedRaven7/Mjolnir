@@ -9,7 +9,6 @@ halves.
 
 `renovate.json` handles everything with a real datasource:
 
-- `gomod` — the static installer's Go module
 - `github-actions` — SHA-pinned action refs
 - `custom.regex` managers for the **version keys** in `include/versions.yml`:
   Kubernetes, cri-tools, containerd, runc, CNI plugins (GitHub releases) and

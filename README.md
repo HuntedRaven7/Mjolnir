@@ -74,19 +74,17 @@ just vm             # boot that image in QEMU
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for prerequisites and the
 full pipeline.
 
-## Installer and CI
+## CI and tests
 
-- `installer/` contains a static Go installer and a build script for a minimal
-  UEFI live ISO that pulls the image from GHCR and runs `bootc install to-disk`.
 - CI rechunks the exported OCI image with
   `projectbluefin/actions/bootc-build/chunka` for update-friendly layers.
-- `renovate.json` tracks Go modules, GitHub Actions and pinned source versions.
+- `renovate.json` tracks GitHub Actions and pinned source versions.
 - `scripts/update_pins.py` and a weekly workflow recompute source hashes/refs;
   see [docs/UPDATES.md](docs/UPDATES.md).
-- `testsuite/` adapts the projectbluefin/testsuite harness to our shell-less
-  image: a QEMU boot/health/provenance check (merge-queue gate, not yet enabled)
-  plus a kind-based multinode propagation test that runs on `testing`. See
-  [testsuite/README.md](testsuite/README.md).
+- `testsuite/` holds the kind-based multinode propagation test and the plugin
+  smoke test that run on `testing`. See [testsuite/README.md](testsuite/README.md).
+  Provisioning installs the image with `bootc install to-disk` directly; Mjolnir
+  does not ship a custom installer.
 
 ## Releases
 

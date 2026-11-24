@@ -50,11 +50,6 @@ The build exported to one Podman store and push used another. Keep
 `PODMAN: "sudo podman"` in the image job env so export, lint, scan and push all
 use rootful storage. The scan uses a docker-archive to be store-independent.
 
-## ISO install fails: `no block devices found`
-
-The live image did not detect a disk. Check `lsblk` in the installer console;
-ensure the VM has a disk attached. Use `--config` with an explicit `disk`.
-
 ## Installed node: no `MjolnirNode` resources
 
 Check the `fleet-kubeconfig` credential and the publish timer:

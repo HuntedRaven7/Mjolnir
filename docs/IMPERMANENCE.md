@@ -47,8 +47,8 @@ needs no local persistence.
   partition is mounted at `/var/lib/mjolnir`, then each allowlist path is a
   bind mount from there.
 - `files/config/journald/10-persistent.conf`: `Storage=persistent`, capped at 2G.
-- `installer/main.go`: generates a stable machine-id at install time and adds
-  `--karg=systemd.machine_id=<uuid>` so PID 1 keeps the same ID across the
+- `bootc install to-disk` boot configuration: provisioning passes a generated
+  machine ID via a kernel argument so PID 1 keeps a stable ID across the
   volatile root. No credential or static ID is baked into the image.
 
 ## Verify on a booted node
