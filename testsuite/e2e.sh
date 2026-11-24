@@ -71,7 +71,15 @@ if [ "${SKIP_PULL:-0}" = "1" ]; then
 fi
 
 echo "==> building installer ISO for ${INSTALL_IMAGE}"
-if ! IMAGE="$INSTALL_IMAGE" ./installer/build-iso.sh > "$BUILD/installer-iso.log" 2>&1; then
+# Fedora's bootc tags are mutable and old digests are quickly garbage-collected
+# from Quay. Resolve the release tag to its current digest at run time, then
+# pass an immutable ref to the ISO builder.
+INSTALLER_BASE_DIGEST=$(skopeo inspect docker://quay.io/fedora/fedora-bootc:45 \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["Digest"])')
+INSTALLER_BASE="quay.io/fedora/fedora-bootc@${INSTALLER_BASE_DIGEST}"
+echo "==> installer base: $INSTALLER_BASE"
+if ! IMAGE="$INSTALL_IMAGE" BASE_IMAGE="$INSTALLER_BASE" \
+    ./installer/build-iso.sh > "$BUILD/installer-iso.log" 2>&1; then
   tail -80 "$BUILD/installer-iso.log" >&2
   fail "installer ISO build failed"
 fi
