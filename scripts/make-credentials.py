@@ -39,7 +39,7 @@ def main() -> int:
     ap.add_argument("--wifi-psk")
     ap.add_argument("--tls-ca", type=Path, help="PEM CA for varlink mTLS client verification")
     ap.add_argument("--journal-forward-socket",
-                    help="journal export socket address (journal.forward_to_socket)")
+                    help="unused journald socket value (written for provisioning tooling only)")
     ap.add_argument("--registry-user")
     ap.add_argument("--registry-token")
     ap.add_argument("--snapshot-url", help="https destination for etcd snapshots")

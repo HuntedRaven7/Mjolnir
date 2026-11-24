@@ -104,9 +104,15 @@ fixed argv; no caller string reaches a shell or an option position.
 - `properties` is optional. When given it is an array of 1 to 16 names from
   `LoadState`, `ActiveState`, `SubState`, `MainPID`, `ExecMainStatus`, `Result`,
   `Description`, `FragmentPath`, `ActiveEnterTimestamp` and `NRestarts`.
-- Output is capped at 64 KiB and each command is killed after 5 seconds. A
+- Output is capped at 64 KiB. Status queries and the five diagnostics, including
+  the NetworkManager calls behind `WifiStatus` and `NetworkChecks`, are killed
+  after 5 seconds. Short cluster actions (`publish`, `ClearRebootLock`) get 15
+  seconds. `Upgrade` gets 15 minutes because it downloads a full image. A
   timeout returns `exitCode` 124. Invalid arguments return an
-  `InvalidArguments` error.
+  `InvalidArguments` error. No command can leave the single Varlink thread
+  waiting forever on a child.
+- `NetworkChecks` runs eight bounded commands in series, so it can hold the
+  Varlink thread for up to about 40 seconds.
 - `KubeadmPreflight` uses `/etc/mjolnir/kubeadm-init.yaml` and checks node
   readiness before join. On a joined control plane it reports the checks that
   now fail because the cluster already exists.
