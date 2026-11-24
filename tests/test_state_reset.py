@@ -101,7 +101,7 @@ def check() -> list[str]:
 
     for scope in ("node-identity", "etcd-data", "full"):
         unit = text(f"files/config/systemd/mjolnir-reset-{scope}.service")
-        if "LoadCredentialEncrypted=reset-confirm" not in unit:
+        if "LoadCredentialEncrypted=reset-confirm:/run/credentials/@system/" not in unit:
             errors.append(f"reset {scope}: sealed confirmation is not required")
         if f"mjolnir-helper reset {scope}" not in unit:
             errors.append(f"reset {scope}: unit does not invoke the scoped helper")

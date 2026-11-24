@@ -578,7 +578,7 @@ static int cmd_reset_preflight(int scope) {
         printf("BLOCKED: role does not permit this scope\n");
         return 1;
     }
-    if (access("/etc/credstore.encrypted/reset-confirm.cred", F_OK) != 0) {
+    if (access("/run/credentials/@system/reset-confirm.cred", F_OK) != 0) {
         printf("BLOCKED: sealed confirmation credential is absent\n");
         return 1;
     }
@@ -589,7 +589,7 @@ static int cmd_reset_preflight(int scope) {
             return 1;
         }
         if (n == 1) {
-            if (access("/etc/credstore.encrypted/reset-lone-cp.cred", F_OK) != 0) {
+            if (access("/run/credentials/@system/reset-lone-cp.cred", F_OK) != 0) {
                 printf("BLOCKED: second sealed confirmation is absent\n");
                 return 1;
             }

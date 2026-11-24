@@ -31,21 +31,23 @@ same invocation. The URL must be HTTPS; both values are written as 0600 files.
 
 ### Sealed reset credentials
 
-Factory reset requires encrypted credentials under `/etc/credstore.encrypted/`,
-sealed to the signed PCR 11 policy so they are readable only by a trusted
+Factory reset requires encrypted credentials delivered as systemd credentials
+(`/run/credentials/@system/reset-confirm.cred` and `reset-lone-cp.cred`). They
+are sealed to the signed PCR 11 policy so they are readable only by a trusted
 boot. Create them off-node with the public key extracted from the signed UKI
-(the public half is not a secret):
+(the public half is not a secret), then place the `.cred` files in the
+provisioning credential directory:
 
 ```sh
 objcopy -O binary -j .pcrpkey mjolnir.efi tpm2-pcr-public-key.pem
 printf 'factory-reset:etcd-data' | \
   systemd-creds encrypt --name=reset-confirm --with-key=tpm2 \
     --tpm2-public-key=tpm2-pcr-public-key.pem - \
-    /etc/credstore.encrypted/reset-confirm.cred
+    reset-confirm.cred
 printf 'lone-cp-etcd-wipe-v1' | \
   systemd-creds encrypt --name=reset-lone-cp --with-key=tpm2 \
     --tpm2-public-key=tpm2-pcr-public-key.pem - \
-    /etc/credstore.encrypted/reset-lone-cp.cred
+    reset-lone-cp.cred
 ```
 
 Use the confirmation string for the scope you intend to allow. The helper

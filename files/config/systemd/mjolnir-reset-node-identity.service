@@ -8,8 +8,8 @@ After=network-online.target var-lib-mjolnir.mount
 Type=oneshot
 # Both credentials are TPM2-sealed to the signed PCR policy at provisioning.
 # Without them the helper exits before removing anything.
-LoadCredentialEncrypted=reset-confirm
-LoadCredentialEncrypted=reset-lone-cp
+LoadCredentialEncrypted=reset-confirm:/run/credentials/@system/reset-confirm.cred
+LoadCredentialEncrypted=reset-lone-cp:/run/credentials/@system/reset-lone-cp.cred
 ExecStart=/usr/bin/mjolnir-helper reset node-identity
 NoNewPrivileges=yes
 PrivateTmp=yes
