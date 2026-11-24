@@ -36,11 +36,20 @@ pass "expected composefs digest=$EXPECTED"
 
 echo "==> installing with bootc install to-disk"
 truncate -s 32G "$WORK/disk.raw"
-# No --karg: a sealed UKI carries its whole cmdline in the signed .cmdline
-# section, and bootc refuses install-time kargs for immutable boot.
+# Via-loopback creates the loop device inside the container, where there is no
+# udev database for bootc's Discoverable Partitions root-type check. Override
+# that check with a CI-only config in /etc; the shipped image keeps DPS and
+# discoverable device paths. No --karg: a sealed UKI carries its whole cmdline
+# in the signed .cmdline section, and bootc refuses install-time kargs.
+mkdir -p "$WORK/bootc-install"
+cat > "$WORK/bootc-install/99-ci-loopback.toml" <<'EOF'
+[install]
+discoverable-partitions = false
+EOF
 sudo podman run --rm --privileged --pid=host \
   -v /dev:/dev --tmpfs /run/udev \
   -v /var/lib/containers:/var/lib/containers \
+  -v "$WORK/bootc-install:/etc/bootc/install:ro" \
   -v "$WORK:/data" "$IMAGE" \
   bootc install to-disk --composefs-backend --via-loopback /data/disk.raw \
     --filesystem btrfs --wipe --bootloader systemd
