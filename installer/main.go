@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const defaultImage = "ghcr.io/huntedraven7/mjolnir:stable"
@@ -329,6 +331,25 @@ func newMachineID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
+// waitForRegistry blocks until the image's registry host resolves, with a
+// bounded deadline so a broken network fails fast with a useful message.
+func waitForRegistry(image string) error {
+	host := "localhost"
+	if i := strings.IndexByte(image, '/'); i > 0 && strings.Contains(image[:i], ".") {
+		host = image[:i]
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if _, err := net.LookupHost(host); err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("DNS for registry %q did not become available", host)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 func install(c *config, disk string, r runner) error {
 	if err := r.run("wipefs", "--all", "--force", disk); err != nil {
 		return fmt.Errorf("wipe %s: %w", disk, err)
@@ -365,6 +386,13 @@ func install(c *config, disk string, r runner) error {
 	// /run is the tmpfs backing the overlay's writable layer; allow it to use
 	// the swap we just added. Failure is harmless if it is not a tmpfs.
 	_ = r.run("mount", "-o", "remount,size=8G", "/run")
+
+	// The live root starts before DNS is necessarily usable. Wait for the
+	// registry name to resolve instead of burning a long network-online.target
+	// timeout in systemd, and fail with a clear message if it never does.
+	if err := waitForRegistry(c.Image); err != nil {
+		return err
+	}
 
 	pull := []string{"pull", c.Image}
 	if err := r.run("podman", pull...); err != nil {
