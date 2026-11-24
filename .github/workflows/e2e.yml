@@ -98,7 +98,9 @@ jobs:
       # bootc cannot reproduce at install time. --force rebuilds from source.
       - name: Rebuild boot artifacts from source (PR only)
         if: github.event_name == 'pull_request' || inputs.local_build
-        run: just bst build --force oci/mjolnir.bst
+        run: |
+          just bst build --ignore-project-artifact-remotes \
+            --artifact-remote invalid oci/mjolnir.bst
 
       - name: Build image locally (PR only)
         if: github.event_name == 'pull_request' || inputs.local_build
