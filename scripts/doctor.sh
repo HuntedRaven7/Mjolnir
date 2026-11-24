@@ -39,9 +39,9 @@ else fail "bst2 image var" "empty" "Set BST2_IMAGE"; fi
 have bst && warn "host bst" "found (unused)" "Mjolnir runs bst only in the pinned container" || true
 
 for spec in \
-  "xorriso:installer ISO build" "mcopy:mtools for ISO" "cpio:initrd handling" \
-  "mksquashfs:squashfs artifacts" "cosign:signature verification" \
-  "skopeo:manifest inspection" "jq:CI parsing" "go:Go installer build"; do
+  "cpio:initrd handling" \
+  "cosign:signature verification" \
+  "skopeo:manifest inspection" "jq:CI parsing"; do
   bin=${spec%%:*}; why=${spec#*:}
   if have "$bin"; then pass "$bin" "$(command -v "$bin")"
   else fail "$bin" "not found" "Install $why"; fi

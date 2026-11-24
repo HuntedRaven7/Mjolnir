@@ -9,7 +9,7 @@
   "prConcurrentLimit": 5,
   "timezone": "Etc/UTC",
 
-  "enabledManagers": ["gomod", "github-actions", "custom.regex"],
+  "enabledManagers": ["github-actions", "custom.regex"],
 
   "customManagers": [
     {
@@ -82,7 +82,7 @@
     },
     {
       "description": "Patch/minor source updates auto-merge after CI; majors need review",
-      "matchManagers": ["custom.regex", "gomod"],
+      "matchManagers": ["custom.regex"],
       "matchUpdateTypes": ["patch", "minor", "pin", "pinDigest", "digest"],
       "automerge": true,
       "automergeType": "pr",
@@ -90,7 +90,7 @@
     },
     {
       "description": "Major source updates always require review",
-      "matchManagers": ["custom.regex", "gomod"],
+      "matchManagers": ["custom.regex"],
       "matchUpdateTypes": ["major"],
       "automerge": false
     },

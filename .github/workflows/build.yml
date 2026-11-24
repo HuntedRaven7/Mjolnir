@@ -126,8 +126,8 @@ jobs:
           source-date-epoch: auto
 
       # The pushed :testing image is the candidate for the manual :stable
-      # promotion in execute-release.yml. e2e.yml runs after this push via
-      # workflow_run, so :testing always exists by the time it pulls.
+      # promotion in execute-release.yml. Downstream jobs pull :testing after
+      # this push, so the tag always exists by the time they run.
       # Compare the newly built image with the previously published :testing
       # image. Runs only on pushes to testing (not PRs) and before the push, so
       # the previous :testing digest is still the baseline.
@@ -163,7 +163,7 @@ jobs:
           IMAGE_ID=$(sudo podman image inspect --format '{{.Id}}' localhost/mjolnir:latest)
           IMAGE="ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir"
           # :testing is the stream tag promoted to :stable on release. :latest
-          # stays as a compatibility alias for existing installer defaults.
+          # stays as a compatibility alias for existing consumers.
           sudo podman push --digestfile /tmp/mjolnir-digest.txt \
             "containers-storage:${IMAGE_ID}" "docker://${IMAGE}:testing"
           sudo podman push "containers-storage:${IMAGE_ID}" "docker://${IMAGE}:latest"
