@@ -7,9 +7,9 @@ changing anything that affects the image content.
 ## Hard rules
 
 1. **No shell, SSH daemon, or language interpreter in the image.** This applies
-   to `/usr` and to every layer that can be merged or enabled. Use compiled
-   helpers (`src/`, Rust) instead of scripts. `tests/test_image_contents.py`
-   fails the build on violations.
+   to `/usr`, to every layer that can be merged or enabled, and to boot
+   artifacts such as the initramfs. Use compiled helpers (`src/`, Rust) instead
+   of scripts. `tests/test_image_contents.py` fails the build on violations.
 2. **No k0s.** Kubernetes is upstream kubeadm only.
 3. **Everything downloaded is pinned by sha256** in `include/versions.yml` and
    the corresponding `.bst` source. Mutable refs (tags, branches) in image
@@ -30,6 +30,13 @@ changing anything that affects the image content.
    CI run. Agents must never push directly to `testing`, `stable` or `main`.
    The only exception is an explicitly requested `just release --apply`, which
    is a maintainer operation, not an agent code change.
+10. **No install-time kernel arguments.** All kargs live in the signed UKI.
+   Provisioning passes settings through systemd credentials or persistent state.
+   `just disk` and CI install steps must not pass `--karg`.
+11. **Every PR needs a completed green `image` check.** A skipped, cancelled, or
+   incomplete check does not authorize a merge.
+12. **Attestation `verified: true` requires positive evidence.** Missing PCR,
+   event log, UKI, or image digest evidence is a failed verification.
 
 ## Build and test commands
 
