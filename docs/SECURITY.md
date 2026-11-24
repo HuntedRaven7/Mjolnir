@@ -1,5 +1,17 @@
 # Security features
 
+## Interpreter policy
+
+The "no shell / no interpreter" rule is enforced at three layers by
+`tests/interpreter_policy.py`: file contents in the exported rootfs (shebangs
+and ELF `DT_NEEDED` links to interpreter libraries), the BuildStream runtime
+graph of `base/os-stack.bst`, and every shipped systemd unit plus the sysusers
+shell configuration. Build-only dependencies such as `bash` in
+`base/sandbox-tools.bst` are allowed. Intentional exceptions live in
+[`tests/interpreter-allowlist.json`](../tests/interpreter-allowlist.json); each
+entry needs a reason and a PR/issue reference, so adding one is a reviewable
+change rather than a silent carve-out.
+
 ## SBOM (software bill of materials)
 
 Mjolnir publishes an **SPDX 2.3 SBOM generated from the BuildStream source

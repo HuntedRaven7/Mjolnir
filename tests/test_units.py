@@ -7,7 +7,12 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-UNIT_DIRS = [ROOT / "files/config/systemd", ROOT / "files/varlink/units"]
+UNIT_DIRS = [
+    ROOT / "files/config/systemd",
+    ROOT / "files/varlink/units",
+    ROOT / "plugins/console/files/systemd",
+    ROOT / "installer/systemd",
+]
 
 FORBIDDEN = [
     re.compile(r"/bin/sh\b"),
@@ -30,6 +35,21 @@ def main() -> int:
             for pattern in FORBIDDEN:
                 if pattern.search(text):
                     errors.append(f"{unit.relative_to(ROOT)}: matches {pattern.pattern}")
+    import interpreter_policy as policy
+
+    allow = policy.load_allowlist()
+    units: list[tuple[str, str]] = []
+    for d in UNIT_DIRS:
+        for unit in d.glob("*"):
+            if unit.is_file():
+                units.append((str(unit.relative_to(ROOT)), unit.read_text()))
+    errors.extend(policy.check_units(units, allow))
+
+    sysusers = ROOT / "files/config/sysusers.d/mjolnir.conf"
+    errors.extend(policy.check_login_shells(
+        sysusers.read_text() if sysusers.is_file() else "", allow
+    ))
+
     for manifest in (ROOT / "files/manifests").rglob("*.yaml"):
         for lineno, line in enumerate(manifest.read_text().splitlines(), 1):
             if "image:" in line and "@sha256:" not in line:
