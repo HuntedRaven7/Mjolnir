@@ -40,10 +40,23 @@ def check() -> list[str]:
         errors.append("crypttab: hardcoded device path")
 
     mount = text("files/config/systemd/var-lib-mjolnir.mount")
-    if "After=cryptsetup.target" not in mount:
+    crypt_unit = "systemd-cryptsetup@mjolnir-state.service"
+    if not re.search(r"^After=.*cryptsetup\.target.*$", mount, re.MULTILINE):
         errors.append("var-lib-mjolnir.mount: does not order after cryptsetup.target")
-    if "/dev/disk/by-label/MjolnirState" not in mount:
-        errors.append("var-lib-mjolnir.mount: does not use the discoverable label")
+    if not re.search(
+        rf"^After=.*\b{re.escape(crypt_unit)}\b.*$", mount, re.MULTILINE
+    ):
+        errors.append("var-lib-mjolnir.mount: cryptsetup unit is not ordered before the mount")
+    if not re.search(
+        rf"^Requires={re.escape(crypt_unit)}\s*$", mount, re.MULTILINE
+    ):
+        errors.append("var-lib-mjolnir.mount: cryptsetup unit is not required")
+    if not re.search(
+        r"^What=/dev/disk/by-label/MjolnirState\s*$", mount, re.MULTILINE
+    ):
+        errors.append("var-lib-mjolnir.mount: What= does not use the discoverable label")
+    if "/dev/mapper/" in mount:
+        errors.append("var-lib-mjolnir.mount: uses the raw mapper path instead of the label")
 
     dracut = text("files/config/dracut/50-mjolnir-tpm2.conf")
     if "add_dracutmodules+=\" crypt " not in dracut:

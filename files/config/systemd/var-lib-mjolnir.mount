@@ -2,7 +2,8 @@
 Description=Persistent Mjolnir state (LUKS-backed btrfs)
 DefaultDependencies=no
 Conflicts=umount.target
-After=cryptsetup.target
+After=cryptsetup.target systemd-cryptsetup@mjolnir-state.service
+Requires=systemd-cryptsetup@mjolnir-state.service
 Before=local-fs.target umount.target
 
 [Mount]
