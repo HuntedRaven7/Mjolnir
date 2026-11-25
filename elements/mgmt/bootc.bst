@@ -11,6 +11,10 @@ sources:
 # BST sandboxes have a read-only root and only /tmp is writable.
 - kind: patch
   path: files/patches/bootc-tmpdir.patch
+# A udev DB can exist without records for partitions created after boot; probe
+# the real disk for the DPS type instead of reporting <none> from lsblk.
+- kind: patch
+  path: files/patches/bootc-parttype-blkid.patch
 - kind: cargo2
   ref:
   - kind: registry

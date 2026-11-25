@@ -37,9 +37,14 @@ pass "expected composefs digest=$EXPECTED"
 
 echo "==> installing with bootc install to-disk"
 truncate -s 32G "$WORK/disk.raw"
-# An empty /run/udev makes bootc probe partition types with blkid instead of
-# the host udev database, which has no record for partitions created inside
-# the container. The host attaches the whole disk with partition scanning.
+# bootc hard-checks the root partition's DPS type GUID before mkfs. It prefers
+# lsblk's udev-backed parttype and mirrors the host udev DB from PID 1, which has
+# no ID_PART_ENTRY_TYPE for loop partitions created after boot. Our bootc patch
+# probes the disk with `blkid -p` whenever lsblk leaves parttype or pttype empty,
+# so the check reads the DPS GUID from the real GPT. bootc requires --pid=host.
+# The disk is attached on the host with partition scanning (-P), so the whole
+# device and its partition nodes are complete. DPS stays on and no device path
+# is hardcoded here.
 # No --karg: the signed UKI carries its whole command line.
 LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
 set +e
