@@ -51,7 +51,7 @@ config:
     install -Dm644 /config/presets/80-mjolnir.preset \
       "${root}/usr/lib/systemd/system-preset/80-mjolnir.preset"
     mkdir -p "${root}/usr/lib/systemd/system"
-    cp /config/systemd/*.service /config/systemd/*.socket \
+    cp /config/systemd/*.service /config/systemd/*.socket /config/systemd/*.timer \
       "${root}/usr/lib/systemd/system/" 2>/dev/null || true
     install -Dm644 /config/sysusers.d/mjolnir.conf "${root}/usr/lib/sysusers.d/mjolnir.conf"
     install -Dm644 /config/tmpfiles.d/mjolnir.conf "${root}/usr/lib/tmpfiles.d/mjolnir.conf"
