@@ -36,17 +36,14 @@ pass "expected composefs digest=$EXPECTED"
 
 echo "==> installing with bootc install to-disk"
 truncate -s 32G "$WORK/disk.raw"
-# bootc hard-checks the root partition's DPS type GUID before mkfs. Its
-# blockdev crate reads the type from `lsblk -O` (udev ID_PART_ENTRY_TYPE) when
-# /run/udev/data exists, and from `blkid -p` (PART_ENTRY_TYPE, read straight
-# from the disk) when it does not. Bind-mounting the host udev database takes
-# the lsblk branch: have_udev() becomes true, but a partition the container
-# just created has no udev record there, so lsblk reports parttype null even
-# though the host sees the correct GUID. Give the install container an empty
-# /run/udev so bootc uses its documented blkid fallback and probes the real
-# partition table. The disk is attached on the host with partition scanning
-# (-P), so the whole device and its partition nodes are complete. DPS stays on
-# and no device path is hardcoded here.
+# bootc hard-checks the root partition's DPS type GUID before mkfs. It prefers
+# lsblk's udev-backed parttype and mirrors the host udev DB from PID 1, which has
+# no ID_PART_ENTRY_TYPE for loop partitions created after boot. Our bootc patch
+# probes the disk with `blkid -p` whenever lsblk leaves parttype or pttype empty,
+# so the check reads the DPS GUID from the real GPT. bootc requires --pid=host.
+# The disk is attached on the host with partition scanning (-P), so the whole
+# device and its partition nodes are complete. DPS stays on and no device path
+# is hardcoded here.
 # No --karg: a sealed UKI carries its whole cmdline in the signed .cmdline
 # section, and bootc refuses install-time kargs.
 LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
@@ -62,7 +59,7 @@ set -e
 if [ "$INSTALL_RC" -ne 0 ]; then
   echo "--- host device view after the failed install ---" >&2
   sudo lsblk -o NAME,PARTTYPE,PTTYPE,FSTYPE "$LOOP" >&2 || true
-  echo "--- container view (no udev DB) after the failed install ---" >&2
+  echo "--- install container device view after the failed install ---" >&2
   sudo podman run --rm --privileged --pid=host --ipc=host \
     -v /dev:/dev -v /sys:/sys:ro --tmpfs /run/udev \
     -v /var/lib/containers:/var/lib/containers \
