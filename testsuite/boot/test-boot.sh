@@ -36,24 +36,33 @@ pass "expected composefs digest=$EXPECTED"
 
 echo "==> installing with bootc install to-disk"
 truncate -s 32G "$WORK/disk.raw"
-# bootc hard-checks the root partition's DPS type GUID before mkfs, reading
-# ID_PART_ENTRY_TYPE through `lsblk -O` from /run/udev. Via-loopback creates the
-# loop device inside this container, so an empty /run/udev makes a valid root
-# partition report type <none> and the install aborts. Bind the host udev
-# database read-only instead of masking the check: the proof then runs with the
-# shipped discoverable-partitions layout. No --karg: a sealed UKI carries its
-# whole cmdline in the signed .cmdline section, and bootc refuses install-time
-# kargs.
-sudo podman run --rm --privileged --pid=host \
+# Attach the disk as a real block device on the host rather than using bootc's
+# --via-loopback. bootc hard-checks the root partition's DPS type GUID before
+# mkfs through `lsblk -O`, which reads ID_PART_ENTRY_TYPE from udev. A loop
+# device created inside the install container has no complete udev record, and
+# a valid root partition then reports type <none> even with the host udev
+# database bind-mounted. Keeping the device in the host gives udev the full
+# view, and the install still uses the shipped discoverable-partitions layout.
+# No --karg: a sealed UKI carries its whole cmdline in the signed .cmdline
+# section, and bootc refuses install-time kargs.
+LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
+set +e
+sudo podman run --rm --privileged --pid=host --ipc=host \
   -v /dev:/dev -v /run/udev:/run/udev:ro \
   -v /var/lib/containers:/var/lib/containers \
-  -v "$WORK:/data" "$IMAGE" \
-  bootc install to-disk --composefs-backend --via-loopback /data/disk.raw \
+  "$IMAGE" \
+  bootc install to-disk --composefs-backend --generic-image "$LOOP" \
     --filesystem btrfs --wipe --bootloader systemd
+INSTALL_RC=$?
+set -e
+if [ "$INSTALL_RC" -ne 0 ]; then
+  echo "--- host device view after the failed install ---" >&2
+  sudo lsblk -o NAME,PARTTYPE,PTTYPE,FSTYPE "$LOOP" >&2 || true
+  fail "bootc install to-disk failed with exit $INSTALL_RC"
+fi
 pass "bootc install to-disk accepted the signed UKI digest"
 
 echo "==> inspecting the installed ESP"
-LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
 ESP_PART=""
 for p in "${LOOP}"p*; do
   [ -b "$p" ] || continue
