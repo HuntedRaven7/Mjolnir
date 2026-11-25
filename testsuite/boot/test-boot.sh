@@ -112,7 +112,7 @@ timeout 240 sudo qemu-system-x86_64 \
   -drive if=pflash,format=raw,unit=0,file="$WORK/code.fd",readonly=on \
   -drive if=pflash,format=raw,unit=1,file="$WORK/vars.fd" \
   -drive file="$WORK/disk.raw",format=raw,media=disk \
-  -smbios type=11,value=io.systemd.credential:mjolnir-boot-report=1 \
+  -smbios type=11,value=io.systemd.credential:mjolnir.boot-report=1 \
   -smbios "type=11,value=io.systemd.credential.binary:varlink-httpd.tls.trust=$CA_B64" \
   -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
   >"$SERIAL" 2>&1 &
@@ -135,6 +135,11 @@ if grep -qE '\[ *FAILED *\]|Failed to start' "$SERIAL"; then
   grep -E '\[ *FAILED *\]|Failed to start' "$SERIAL" >&2
   fail "failed systemd units at boot"
 fi
+# The status JSON alone could come from another console writer. Assert the unit
+# actually started, and name the credential in the error so a future rename
+# mismatch fails with the cause instead of a missing-JSON symptom.
+grep -q 'Started Report bootc status on the serial console' "$SERIAL" || \
+  fail "mjolnir-boot-report.service did not start; the credential must be named mjolnir.boot-report"
 grep -q '"booted"' "$SERIAL" || fail "bootc status report missing from console"
 grep -q '"image"' "$SERIAL" || fail "bootc status did not report image provenance"
 pass "booted with OVMF: signed cmdline, bootc status, no failed units, provenance"

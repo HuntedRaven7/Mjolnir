@@ -73,7 +73,7 @@ of the UKIs it installs after the deployment digest. Provisioning copies the
 debug binary and its `mjolnir-debug.conf` onto the ESP only when a debug entry
 is wanted; the default image always boots the DB/VENDOR-signed UKI.
 
-The `mjolnir-boot-report` systemd credential is opt-in and prints `bootc status`
+The `mjolnir.boot-report` systemd credential is opt-in and prints `bootc status`
 JSON on the serial console. CI uses it to assert bootc status and image
 provenance without a shell in the image.
 

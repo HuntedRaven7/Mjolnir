@@ -2,8 +2,8 @@
 Description=Report bootc status on the serial console
 Documentation=https://github.com/HuntedRaven7/Mjolnir
 # Opt-in diagnostic for headless nodes. The provisioning system sets the
-# `mjolnir-boot-report` systemd credential when console diagnostics are wanted.
-ConditionPathExists=/run/credentials/@system/mjolnir-boot-report
+# `mjolnir.boot-report` systemd credential when console diagnostics are wanted.
+ConditionPathExists=/run/credentials/@system/mjolnir.boot-report
 After=multi-user.target
 
 [Service]
