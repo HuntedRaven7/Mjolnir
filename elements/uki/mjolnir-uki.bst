@@ -1,10 +1,10 @@
 kind: manual
 description: |
-  SIGNING-ONLY. Builds a signed, composefs-digest-pinned UKI with bootc's
-  ukify integration. The digest is computed from the exact final rootfs and
-  baked into the signed .cmdline section, so Secure Boot trusts the root.
+  SIGNING-ONLY. Owns the final rootfs tree, builds a signed composefs-digest-
+  pinned UKI for it, and stages both so oci/mjolnir.bst can build the OCI layer
+  from the exact tree whose digest is baked into the signed .cmdline section.
   NEVER add this element to a runtime stack (its artifact contains key material
-  via boot-keys.bst). The resulting EFI is copied into the OCI by oci/mjolnir.bst.
+  via boot-keys.bst and a full copy of the rootfs).
 
 build-depends:
 - base/sandbox-tools.bst
@@ -42,13 +42,27 @@ config:
     WORK=/tmp/mjolnir-uki
     ROOTFS="$WORK/rootfs"
     mkdir -p "$WORK" "${ROOTFS}" "$WORK/keys" \
-      "%{install-root}/boot/EFI/Linux" \
-      "%{install-root}/usr/lib/systemd/boot/efi" "%{install-root}/usr/share/mjolnir"
+      "%{install-root}/rootfs" "%{install-root}/usr/share/mjolnir"
     # Staged deps are read-only; copy keys to writable /tmp and fix their mode
     # (systemd-sbsign refuses overly permissive private keys).
     cp /boot-keys/*.key /boot-keys/*.crt /boot-keys/*.pub "$WORK/keys/"
     chmod 0600 "$WORK/keys/"*.key
     cp -a /layer/. "${ROOTFS}/"
+
+    # Sign systemd-boot so Secure Boot can load the loader; bootctl prefers the
+    # .signed variant. This is a /usr file, so it is part of the composefs digest
+    # and must be in the tree before the digest is computed. The signed bytes and
+    # the parent directory mtime must match the BST-normalized OCI layer: copy
+    # the mtimes from the files that came from the staged dependency.
+    EFI_DIR="${ROOTFS}/usr/lib/systemd/boot/efi"
+    /usr/lib/systemd/systemd-sbsign sign \
+      --private-key="${WORK}/keys/VENDOR.key" \
+      --certificate="${WORK}/keys/VENDOR.crt" \
+      --output="${EFI_DIR}/systemd-boot%{efi-arch}.efi.signed" \
+      "${EFI_DIR}/systemd-boot%{efi-arch}.efi"
+    touch -r "${EFI_DIR}/systemd-boot%{efi-arch}.efi" \
+      "${EFI_DIR}/systemd-boot%{efi-arch}.efi.signed"
+    touch -r "/layer/usr/lib/systemd/boot/efi" "${EFI_DIR}"
 
     # Use the kernel/initramfs already built by kernel/initramfs.bst (staged
     # at /kernel). Do NOT run split-kernel-and-rootfs on the rootfs: it *moves*
@@ -81,10 +95,17 @@ config:
     cmp "$WORK/pcrpkey.pem" "${WORK}/keys/PCR.pub"
     grep -q '"sig"' "$WORK/pcrsig.json"
 
+    # The pinned composefs digest, as a build record. It is deliberately kept
+    # out of the image: a file containing its own tree's digest cannot be part
+    # of that tree. No runtime code reads it; attestation reads /proc/cmdline.
+    bootc container compute-composefs-digest "$ROOTFS" > \
+      "%{install-root}/usr/share/mjolnir/composefs-digest.txt"
+
     # Assert the signature and that the digest was baked into the cmdline.
     sbverify --cert "${WORK}/keys/VENDOR.crt" "$WORK/mjolnir.efi"
     objcopy -O binary -j .cmdline "$WORK/mjolnir.efi" "$WORK/cmdline.txt"
-    grep -q 'composefs' "$WORK/cmdline.txt"
+    grep -q "$(cat "%{install-root}/usr/share/mjolnir/composefs-digest.txt")" \
+      "$WORK/cmdline.txt"
     grep -q 'systemd.volatile=yes' "$WORK/cmdline.txt"
     grep -q 'console=ttyS0,115200' "$WORK/cmdline.txt"
     grep -q 'systemd.journald.forward_to_console=1' "$WORK/cmdline.txt"
@@ -97,17 +118,11 @@ config:
       "%{install-root}/usr/lib/systemd/tpm2-pcr-public-key.pem"
     install -Dm644 "$WORK/pcrsig.json" \
       "%{install-root}/usr/share/mjolnir/tpm2-pcr-signature.json"
+
+    # bootc's boot transform empties /boot before hashing, so installing the UKI
+    # here does not invalidate the digest computed above.
     install -Dm644 "$WORK/mjolnir.efi" \
-      "%{install-root}/boot/EFI/Linux/mjolnir-${kver}.efi"
+      "${ROOTFS}/boot/EFI/Linux/mjolnir-${kver}.efi"
 
-    # Sign systemd-boot so Secure Boot can load the loader; bootctl prefers
-    # the .signed variant.
-    /usr/lib/systemd/systemd-sbsign sign \
-      --private-key="${WORK}/keys/VENDOR.key" \
-      --certificate="${WORK}/keys/VENDOR.crt" \
-      --output="%{install-root}/usr/lib/systemd/boot/efi/systemd-boot%{efi-arch}.efi.signed" \
-      "/usr/lib/systemd/boot/efi/systemd-boot%{efi-arch}.efi"
-
-    # The pinned composefs digest, for attestation/verification.
-    bootc container compute-composefs-digest "$ROOTFS" > \
-      "%{install-root}/usr/share/mjolnir/composefs-digest.txt"
+    # The OCI layer is this exact tree. oci/mjolnir.bst must not mutate it.
+    cp -a "${ROOTFS}/." "%{install-root}/rootfs/"
