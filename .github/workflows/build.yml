@@ -120,6 +120,22 @@ jobs:
       - name: bootc lint
         run: just lint
 
+      # Rechunk the image into update-friendly OCI layers using the shared
+      # action. The BuildStream/FSDK image has no RPM database, so we use the
+      # buildah path (no fakecap xattr manifest) and skip
+      # apply-pkg-intervals. force-compression stays false to keep the
+      # ostree.components layer annotations intact.
+      # This must run before the install: bootc's composefs backend cannot read
+      # the single large BuildStream layer ("Unexpected EOF in splitstream"),
+      # so the boot harness has to install the same rechunked image that is
+      # published below.
+      - name: Rechunk image with chunkah
+        uses: projectbluefin/actions/bootc-build/chunka@da0469cf14f4b714f3756fe66454a207459924e9 # v1
+        with:
+          source-image: localhost/mjolnir:latest
+          max-layers: "128"
+          source-date-epoch: auto
+
       # The install is the digest proof: bootc regenerates the composefs digest
       # from the final OCI rootfs and refuses to install unless it matches the
       # one embedded in the signed UKI. The VM boot then checks the signed
@@ -141,18 +157,6 @@ jobs:
           severity-threshold: CRITICAL
           exit-code: '0'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Rechunk the image into update-friendly OCI layers using the shared
-      # action. The BuildStream/FSDK image has no RPM database, so we use the
-      # buildah path (no fakecap xattr manifest) and skip
-      # apply-pkg-intervals. force-compression stays false to keep the
-      # ostree.components layer annotations intact.
-      - name: Rechunk image with chunkah
-        uses: projectbluefin/actions/bootc-build/chunka@da0469cf14f4b714f3756fe66454a207459924e9 # v1
-        with:
-          source-image: localhost/mjolnir:latest
-          max-layers: "128"
-          source-date-epoch: auto
 
       # The pushed :testing image is the candidate for the manual :stable
       # promotion in execute-release.yml. Downstream jobs pull :testing after
