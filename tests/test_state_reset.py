@@ -9,6 +9,7 @@ reset cannot proceed without the seals, topology checks and a drain.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -93,12 +94,16 @@ def check() -> list[str]:
         if "uki/boot-keys.bst" in element.read_text():
             errors.append(f"{element.name}: signing-only key element in runtime stack")
 
-    # Only public PCR material may be committed. No private key or certificate
-    # file is tracked outside the gitignored files/boot-keys directory.
-    for suffix in (".key", ".pem", ".crt"):
-        for p in ROOT.rglob("*" + suffix):
-            if p.is_file() and "boot-keys" not in p.parts:
-                errors.append(f"key material in repository: {p.relative_to(ROOT)}")
+    # Only public PCR material may be committed. Scan tracked files only:
+    # BuildStream stages upstream test keys into the gitignored .bst cache,
+    # which is build output and not repository content.
+    tracked = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z"],
+        capture_output=True, check=True,
+    ).stdout.decode().split("\0")
+    for name in tracked:
+        if name.endswith((".key", ".pem", ".crt")) and "boot-keys" not in Path(name).parts:
+            errors.append(f"key material in repository: {name}")
 
     enroll = text("files/config/systemd/mjolnir-state-enroll.service")
     for fragment in (
