@@ -43,7 +43,7 @@ config:
       "%{install-root}/usr/lib/systemd/boot/efi" "%{install-root}/usr/share/mjolnir"
     # Staged deps are read-only; copy keys to writable /tmp and fix their mode
     # (systemd-sbsign refuses overly permissive private keys).
-    cp /boot-keys/*.key /boot-keys/*.crt "$WORK/keys/"
+    cp /boot-keys/*.key /boot-keys/*.crt /boot-keys/*.pub "$WORK/keys/"
     chmod 0600 "$WORK/keys/"*.key
     cp -a /layer/. "${ROOTFS}/"
 

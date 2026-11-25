@@ -79,6 +79,8 @@ def check() -> list[str]:
             errors.append(f"UKI element: missing {option} (signed PCR 11 policy)")
     if ".pcrsig" not in uki or ".pcrpkey" not in uki:
         errors.append("UKI element: PCR signature/public key section not asserted")
+    if "/boot-keys/*.pub" not in uki:
+        errors.append("UKI element: PCR public key is not staged for ukify")
 
     keys = text("elements/uki/boot-keys.bst")
     if "PCR.key" not in keys or "PCR.pub" not in keys:
