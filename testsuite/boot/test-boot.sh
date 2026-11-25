@@ -21,16 +21,23 @@ done
 sudo -n true || fail "passwordless sudo is required for the privileged install and QEMU"
 
 rm -rf "$WORK"
-mkdir -p "$WORK/rootfs" "$WORK/esp"
+mkdir -p "$WORK/esp"
 trap 'set +e; sudo umount "$WORK/esp" 2>/dev/null; [ -n "${LOOP:-}" ] && sudo losetup -d "$LOOP" 2>/dev/null; sudo podman rm -f mjolnir-boot-src 2>/dev/null' EXIT
 
 echo "==> computing the expected composefs digest from the image under test"
+# bootc verifies the signed UKI by pulling this image from container storage
+# into a composefs repository at install time. Exporting the container rootfs
+# instead adds podman-generated /etc files and drops xattrs, so it measures a
+# different tree. Use bootc's own storage view for the digest we assert on.
 sudo podman create --name mjolnir-boot-src "$IMAGE" >/dev/null
-sudo podman export mjolnir-boot-src | tar -x -C "$WORK/rootfs"
-EXPECTED=$(sudo podman run --rm --privileged -v "$WORK/rootfs:/target:ro" \
-  "$IMAGE" bootc container compute-composefs-digest /target)
+GRAPH_ROOT=$(sudo podman system info -f '{{.Store.GraphRoot}}')
+[ -n "$GRAPH_ROOT" ] || fail "cannot find the rootful podman graph root"
+EXPECTED=$(sudo podman run --rm --privileged --security-opt=label=disable \
+  -v "${GRAPH_ROOT}:/run/host-container-storage:ro" -v /sys:/sys:ro \
+  --tmpfs=/var \
+  "$IMAGE" bootc container compute-composefs-digest-from-storage)
 case "$EXPECTED" in
-  *[!0-9a-f]*|'') fail "invalid digest from compute-composefs-digest: $EXPECTED" ;;
+  *[!0-9a-f]*|'') fail "invalid digest from compute-composefs-digest-from-storage: $EXPECTED" ;;
 esac
 pass "expected composefs digest=$EXPECTED"
 
