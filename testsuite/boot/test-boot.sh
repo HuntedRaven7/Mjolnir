@@ -26,12 +26,17 @@ mkdir -p "$WORK/rootfs" "$WORK/esp"
 trap 'set +e; sudo umount "$WORK/esp" 2>/dev/null; [ -n "${LOOP:-}" ] && sudo losetup -d "$LOOP" 2>/dev/null; kill "${QEMU_PID:-}" 2>/dev/null; sudo podman rm -f mjolnir-boot-src 2>/dev/null' EXIT
 
 echo "==> computing the expected composefs digest from the image under test"
-sudo podman create --name mjolnir-boot-src "$IMAGE" >/dev/null
-sudo podman export mjolnir-boot-src | tar -x -C "$WORK/rootfs"
-EXPECTED=$(sudo podman run --rm --privileged -v "$WORK/rootfs:/target:ro" \
-  "$IMAGE" bootc container compute-composefs-digest /target)
+# bootc install hashes the OCI layers in container storage, not a flattened tar
+# export: rechunking changes how a tar view collapses hardlinks and directory
+# metadata. Compute the digest from the same view the installer consumes so the
+# assertion below compares the UKI against the image it was actually installed
+# from. This is bootc's own compute-composefs-digest-from-storage path.
+GRAPHROOT=$(sudo podman system info -f '{{.Store.GraphRoot}}')
+EXPECTED=$(sudo podman run --rm --privileged --security-opt=label=disable \
+  -v "$GRAPHROOT:/run/host-container-storage:ro" -v /sys:/sys:ro --tmpfs=/var \
+  "$IMAGE" bootc container compute-composefs-digest-from-storage)
 case "$EXPECTED" in
-  *[!0-9a-f]*|'') fail "invalid digest from compute-composefs-digest: $EXPECTED" ;;
+  *[!0-9a-f]*|'') fail "invalid digest from compute-composefs-digest-from-storage: $EXPECTED" ;;
 esac
 pass "expected composefs digest=$EXPECTED"
 
