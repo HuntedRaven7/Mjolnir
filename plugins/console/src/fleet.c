@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -843,6 +844,15 @@ static json_object *dispatch(json_object *req) {
 }
 
 static void handle_client(int fd) {
+    // The accept loop is single threaded: a client that connects and sends
+    // nothing must not hold it. Reuse the diagnostics deadline so each recv
+    // fails after DIAG_TIMEOUT_MS and the loop can serve the next client.
+    struct timeval deadline = {
+        .tv_sec = DIAG_TIMEOUT_MS / 1000,
+        .tv_usec = (DIAG_TIMEOUT_MS % 1000) * 1000,
+    };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &deadline, sizeof(deadline));
+
     char buf[65536];
     size_t len = 0;
     for (;;) {
