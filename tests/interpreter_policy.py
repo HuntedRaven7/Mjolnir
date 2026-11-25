@@ -39,7 +39,6 @@ SECTIONS = (
     "graph_runtime",
     "unit_exec",
     "login_shell",
-    "initramfs",
 )
 
 # A member of the initramfs whose name is one of these is an interpreter
@@ -247,6 +246,11 @@ def iter_initramfs_members(blob: bytes) -> list[InitramfsMember]:
     members: list[InitramfsMember] = []
     pos = 0
     while pos < len(blob):
+        # Dracut pads each concatenated archive with zero bytes to an alignment
+        # boundary. Skip that padding before looking for the next archive magic.
+        if blob[pos] == 0:
+            pos += 1
+            continue
         if blob[pos:pos + 6] in CPIO_MAGIC:
             pos, entries = _parse_cpio(blob, pos)
             members.extend(entries)
@@ -271,12 +275,14 @@ def _is_interpreter_name(path: str) -> bool:
     return bool(INTERPRETER_BASENAME.fullmatch(name))
 
 
-def check_initramfs(members: Iterable[InitramfsMember], allow: Allowlist) -> list[str]:
-    """Fail on interpreter binaries and shebang scripts inside the initramfs.
+def check_initramfs(members: Iterable[InitramfsMember]) -> list[str]:
+    """Fail on any interpreter binary or shebang script inside the initramfs.
 
-    Known offenders may be enumerated in the `initramfs` allowlist section with
-    a reason and ref. Any new offender fails the build; entries become stale
-    once the offender is removed, which keeps the exception reviewable.
+    There is deliberately no allowlist parameter. Hard rule 1 covers boot
+    artifacts, so a shell in the initramfs is a violation even if a script in
+    `/usr` would be allowlisted. The only way to make this check pass is to
+    remove the offenders from the initramfs or redesign the boot path without
+    an interpreter.
     """
     errors: list[str] = []
     for member in members:
@@ -286,19 +292,16 @@ def check_initramfs(members: Iterable[InitramfsMember], allow: Allowlist) -> lis
         if _is_interpreter_name(member.path):
             reasons.append("interpreter binary")
         is_regular = (member.mode & 0o170000) == 0o100000
-        shebang = ""
         if is_regular and member.payload.startswith(b"#!"):
             shebang = member.payload.split(b"\n", 1)[0].decode("utf-8", "replace")
             reasons.append(f"shebang {shebang!r}")
         if not reasons:
             continue
-        if not allow.has("initramfs", member.path):
-            errors.append(
-                f"[initramfs] {' + '.join(reasons)} at /{member.path} is not "
-                "allowlisted (initramfs); remove it from the initramfs or document "
-                "a narrow exception with a reason and ref in "
-                "tests/interpreter-allowlist.json"
-            )
+        errors.append(
+            f"[initramfs] {' + '.join(reasons)} at /{member.path} violates hard "
+            "rule 1; remove it from the initramfs or redesign the boot path "
+            "without an interpreter"
+        )
     return errors
 
 

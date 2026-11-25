@@ -31,12 +31,13 @@ def cpio(entries: list[bytes]) -> bytes:
 
 def initramfs(entries: list[bytes], microcode: bool = False) -> bytes:
     prefix = cpio([newc("kernel/x86/microcode/ucode.bin", b"ucode")]) if microcode else b""
-    return prefix + compression.zstd.compress(cpio(entries))
+    # dracut pads the microcode archive before the compressed one.
+    return prefix + (b"\0" * 64 if microcode else b"") + compression.zstd.compress(cpio(entries))
 
 
-def check(blob: bytes, allow: policy.Allowlist | None = None):
+def check(blob: bytes):
     members = policy.iter_initramfs_members(blob)
-    return policy.check_initramfs(members, allow or policy.Allowlist())
+    return policy.check_initramfs(members)
 
 
 def test_clean_initramfs_passes() -> None:
@@ -65,19 +66,10 @@ def test_microcode_prefix_is_walked() -> None:
     assert any("/bin/sh" in e for e in check(blob))
 
 
-def test_allowlist_silences_and_stays_used() -> None:
-    blob = initramfs([
-        newc("usr/bin/bash", b"\x7fELF", mode=0o100755),
-        newc("usr/lib/dracut/hooks/initqueue/50mount.sh", b"#!/bin/sh\nmount\n"),
-    ])
-    entries = [
-        {"path": "usr/bin/bash", "reason": "dracut hook interpreter", "ref": "#62"},
-        {"path": "usr/lib/dracut/hooks/initqueue/50mount.sh",
-         "reason": "dracut mount hook", "ref": "#62"},
-    ]
-    allow = policy.Allowlist(entries={"initramfs": {e["path"]: e for e in entries}})
-    assert check(blob, allow) == []
-    assert policy.stale_entries(allow) == []
+def test_no_allowlist_escape_hatch() -> None:
+    assert "initramfs" not in policy.SECTIONS
+    blob = initramfs([newc("usr/bin/bash", b"\x7fELF", mode=0o100755)])
+    assert check(blob)
 
 
 def test_malformed_initramfs_fails_loudly() -> None:

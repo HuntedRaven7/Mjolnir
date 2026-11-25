@@ -563,6 +563,5 @@
     }
   ],
   "unit_exec": [],
-  "login_shell": [],
-  "initramfs": []
+  "login_shell": []
 }

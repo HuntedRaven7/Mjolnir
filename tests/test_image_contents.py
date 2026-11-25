@@ -89,7 +89,7 @@ def check(image: str) -> list[str]:
             except (ValueError, ImportError) as exc:
                 errors.append(f"[initramfs] cannot walk /{path}: {exc}")
             else:
-                errors.extend(policy.check_initramfs(members, allow))
+                errors.extend(policy.check_initramfs(members))
 
     paths, suid = image_files(image, on_file=inspect)
     pathset = set(paths)
