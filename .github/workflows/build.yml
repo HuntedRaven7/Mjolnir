@@ -107,7 +107,8 @@ jobs:
       - name: Show BuildStream failure logs
         if: failure()
         run: |
-          for log in "$HOME"/.cache/buildstream/logs/mjolnir/kernel-initramfs/*-build.*.log; do
+          for log in "$HOME"/.cache/buildstream/logs/mjolnir/kernel-initramfs/*-build.*.log \
+                     "$HOME"/.cache/buildstream/logs/mjolnir/uki-mjolnir-uki/*-build.*.log; do
             [ -f "$log" ] || continue
             echo "===== $log ====="
             cat "$log"
