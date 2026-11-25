@@ -52,6 +52,8 @@ config:
     ln -sf ../usr/lib/os-release "${root}/etc/os-release"
 
     # --- no shell / no SSH / no interpreters --------------------------------
+    # btrfs-progs ships fsck.btrfs as a /bin/sh wrapper; drop the wrapper and
+    # keep the compiled mkfs.btrfs that bootc install needs.
     for f in \
       bin/sh usr/bin/sh bin/bash usr/bin/bash usr/bin/dash \
       usr/bin/rbash usr/bin/zsh usr/bin/fish usr/bin/csh usr/bin/tcsh \
@@ -60,6 +62,7 @@ config:
       usr/bin/ssh usr/bin/sshd usr/bin/scp usr/bin/sftp usr/bin/ssh-keygen \
       usr/bin/ssh-keyscan usr/bin/sftp-server \
       usr/bin/login usr/bin/agetty usr/bin/su usr/bin/sulogin \
+      usr/bin/fsck.btrfs \
       etc/pam.d/sshd; do
       rm -f "${root}/${f}"
     done
