@@ -1747,6 +1747,7 @@ build-depends:
 
 depends:
 - freedesktop-sdk.bst:components/btrfs-progs.bst
+- freedesktop-sdk.bst:components/dosfstools.bst
 - freedesktop-sdk.bst:components/composefs.bst
 - freedesktop-sdk.bst:components/ostree.bst
 - freedesktop-sdk.bst:components/podman.bst
