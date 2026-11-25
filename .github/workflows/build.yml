@@ -35,6 +35,7 @@ jobs:
           python3 tests/test_attestation_verifier.py
           python3 tests/test_fleet_varlink.py
           python3 tests/test_fleet_runner.py
+          python3 tests/test_initramfs_policy.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.

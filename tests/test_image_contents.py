@@ -83,6 +83,13 @@ def check(image: str) -> list[str]:
 
     def inspect(path: str, blob: bytes) -> None:
         errors.extend(policy.check_content([(path, blob)], allow))
+        if re.fullmatch(r"usr/lib/modules/[^/]+/initramfs\.img", path):
+            try:
+                members = policy.iter_initramfs_members(blob)
+            except (ValueError, ImportError) as exc:
+                errors.append(f"[initramfs] cannot walk /{path}: {exc}")
+            else:
+                errors.extend(policy.check_initramfs(members, allow))
 
     paths, suid = image_files(image, on_file=inspect)
     pathset = set(paths)

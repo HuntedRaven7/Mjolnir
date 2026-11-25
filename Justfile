@@ -83,6 +83,7 @@ test:
     python3 tests/test_state_reset.py
     python3 tests/test_attestation_verifier.py
     python3 tests/test_fleet_varlink.py
+    python3 tests/test_initramfs_policy.py
     python3 tests/test_update_pins.py
     python3 tests/test_pins.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"
