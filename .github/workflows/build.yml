@@ -36,6 +36,7 @@ jobs:
           python3 tests/test_fleet_varlink.py
           python3 tests/test_fleet_runner.py
           python3 tests/test_initramfs_policy.py
+          python3 tests/test_initramfs_sanitizer.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.
@@ -123,6 +124,15 @@ jobs:
 
       - name: bootc lint
         run: just lint
+
+      # The install checks that bootc accepts the signed digest, and the OVMF
+      # boot checks that the shell-free initramfs actually mounts the composefs
+      # root and reaches user space. A static content check cannot prove that.
+      - name: Install and boot test (OVMF)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 ovmf binutils
+          just boot-test
 
       - name: Export image for scanning
         run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest
