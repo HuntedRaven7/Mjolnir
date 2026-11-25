@@ -48,7 +48,7 @@ truncate -s 32G "$WORK/disk.raw"
 LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
 set +e
 sudo podman run --rm --privileged --pid=host --ipc=host \
-  -v /dev:/dev -v /run/udev:/run/udev:ro \
+  -v /dev:/dev -v /sys:/sys:ro -v /run/udev:/run/udev \
   -v /var/lib/containers:/var/lib/containers \
   "$IMAGE" \
   bootc install to-disk --composefs-backend --generic-image "$LOOP" \
@@ -58,6 +58,11 @@ set -e
 if [ "$INSTALL_RC" -ne 0 ]; then
   echo "--- host device view after the failed install ---" >&2
   sudo lsblk -o NAME,PARTTYPE,PTTYPE,FSTYPE "$LOOP" >&2 || true
+  echo "--- container device view after the failed install ---" >&2
+  sudo podman run --rm --privileged --pid=host --ipc=host \
+    -v /dev:/dev -v /sys:/sys:ro -v /run/udev:/run/udev \
+    -v /var/lib/containers:/var/lib/containers \
+    "$IMAGE" lsblk -J -b -O "$LOOP" >&2 || true
   fail "bootc install to-disk failed with exit $INSTALL_RC"
 fi
 pass "bootc install to-disk accepted the signed UKI digest"
