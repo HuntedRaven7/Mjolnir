@@ -20,6 +20,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "member-id.h"
+
 #define ADMIN_CONF "/etc/kubernetes/admin.conf"
 #define KUBELET_CONF "/etc/kubernetes/kubelet.conf"
 #define KUBECONFIG "/root/.kube/config"
@@ -402,24 +404,6 @@ static int etcd_pod(char *buf, size_t size) {
     if (end) *end = '\0';
     snprintf(buf, size, "%s", out + 4);
     return 0;
-}
-
-// Extract the member id of this node from `etcdctl member list -o simple`.
-// The first column is hex; the name column contains the Kubernetes node name.
-static int member_id(const char *list, const char *self, char *out, size_t size) {
-    char copy[16384];
-    snprintf(copy, sizeof(copy), "%s", list);
-    for (char *line = strtok(copy, "\n"); line; line = strtok(NULL, "\n")) {
-        if (!strstr(line, self)) continue;
-        char *end = strchr(line, ':');
-        if (!end || end == line || (size_t)(end - line) >= size) return -1;
-        for (char *p = line; p < end; p++)
-            if (!isxdigit((unsigned char)*p)) return -1;
-        *end = '\0';
-        snprintf(out, size, "%s", line);
-        return 0;
-    }
-    return -1;
 }
 
 // Multi-control-plane: remove this node from the etcd quorum before wiping

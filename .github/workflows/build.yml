@@ -29,6 +29,7 @@ jobs:
       - name: Static checks
         run: |
           python3 tests/test_units.py
+          python3 tests/test_member_id.py
           python3 tests/test_diagnostics.py
           python3 tests/test_state_reset.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
