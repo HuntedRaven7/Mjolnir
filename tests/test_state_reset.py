@@ -81,6 +81,8 @@ def check() -> list[str]:
         errors.append("UKI element: PCR signature/public key section not asserted")
     if "/boot-keys/*.pub" not in uki:
         errors.append("UKI element: PCR public key is not staged for ukify")
+    if "components/tpm2-tss.bst" not in uki:
+        errors.append("UKI element: missing tpm2-tss for systemd-measure")
 
     keys = text("elements/uki/boot-keys.bst")
     if "PCR.key" not in keys or "PCR.pub" not in keys:

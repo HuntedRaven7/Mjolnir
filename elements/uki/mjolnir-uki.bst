@@ -12,7 +12,10 @@ build-depends:
 - freedesktop-sdk.bst:components/systemd-ukify.bst
 - freedesktop-sdk.bst:components/_private/sbsigntools.bst
 - freedesktop-sdk.bst:components/binutils.bst
+- freedesktop-sdk.bst:components/diffutils.bst
 - freedesktop-sdk.bst:components/systemd.bst
+# systemd-measure computes the PCR policy with libtss2 in the build sandbox.
+- freedesktop-sdk.bst:components/tpm2-tss.bst
 - mgmt/bootc.bst
 - filename: kernel/initramfs.bst
   config:
