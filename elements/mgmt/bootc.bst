@@ -1746,6 +1746,7 @@ build-depends:
 - freedesktop-sdk.bst:public-stacks/buildsystem-make.bst
 
 depends:
+- freedesktop-sdk.bst:components/btrfs-progs.bst
 - freedesktop-sdk.bst:components/composefs.bst
 - freedesktop-sdk.bst:components/ostree.bst
 - freedesktop-sdk.bst:components/podman.bst
