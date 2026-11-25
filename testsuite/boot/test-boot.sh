@@ -36,19 +36,23 @@ pass "expected composefs digest=$EXPECTED"
 
 echo "==> installing with bootc install to-disk"
 truncate -s 32G "$WORK/disk.raw"
-# Attach the disk as a real block device on the host rather than using bootc's
-# --via-loopback. bootc hard-checks the root partition's DPS type GUID before
-# mkfs through `lsblk -O`, which reads ID_PART_ENTRY_TYPE from udev. A loop
-# device created inside the install container has no complete udev record, and
-# a valid root partition then reports type <none> even with the host udev
-# database bind-mounted. Keeping the device in the host gives udev the full
-# view, and the install still uses the shipped discoverable-partitions layout.
+# bootc hard-checks the root partition's DPS type GUID before mkfs. Its
+# blockdev crate reads the type from `lsblk -O` (udev ID_PART_ENTRY_TYPE) when
+# /run/udev/data exists, and from `blkid -p` (PART_ENTRY_TYPE, read straight
+# from the disk) when it does not. Bind-mounting the host udev database takes
+# the lsblk branch: have_udev() becomes true, but a partition the container
+# just created has no udev record there, so lsblk reports parttype null even
+# though the host sees the correct GUID. Give the install container an empty
+# /run/udev so bootc uses its documented blkid fallback and probes the real
+# partition table. The disk is attached on the host with partition scanning
+# (-P), so the whole device and its partition nodes are complete. DPS stays on
+# and no device path is hardcoded here.
 # No --karg: a sealed UKI carries its whole cmdline in the signed .cmdline
 # section, and bootc refuses install-time kargs.
 LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
 set +e
 sudo podman run --rm --privileged --pid=host --ipc=host \
-  -v /dev:/dev -v /sys:/sys:ro -v /run/udev:/run/udev \
+  -v /dev:/dev -v /sys:/sys:ro --tmpfs /run/udev \
   -v /var/lib/containers:/var/lib/containers \
   "$IMAGE" \
   bootc install to-disk --composefs-backend --generic-image "$LOOP" \
@@ -58,11 +62,15 @@ set -e
 if [ "$INSTALL_RC" -ne 0 ]; then
   echo "--- host device view after the failed install ---" >&2
   sudo lsblk -o NAME,PARTTYPE,PTTYPE,FSTYPE "$LOOP" >&2 || true
-  echo "--- container device view after the failed install ---" >&2
+  echo "--- container view (no udev DB) after the failed install ---" >&2
   sudo podman run --rm --privileged --pid=host --ipc=host \
-    -v /dev:/dev -v /sys:/sys:ro -v /run/udev:/run/udev \
+    -v /dev:/dev -v /sys:/sys:ro --tmpfs /run/udev \
     -v /var/lib/containers:/var/lib/containers \
     "$IMAGE" lsblk -J -b -O "$LOOP" >&2 || true
+  echo "--- blkid -p fallback view of the root partition ---" >&2
+  sudo podman run --rm --privileged --pid=host --ipc=host \
+    -v /dev:/dev -v /sys:/sys:ro --tmpfs /run/udev \
+    "$IMAGE" blkid -p -o export "${LOOP}p3" >&2 || true
   fail "bootc install to-disk failed with exit $INSTALL_RC"
 fi
 pass "bootc install to-disk accepted the signed UKI digest"
