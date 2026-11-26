@@ -6,6 +6,10 @@ description: |
 
 build-depends:
 - base/sandbox-tools.bst
+# bootc brings the 51bootc and 50ostree dracut modules, initramfs-setup and
+# ostree-prepare-root. Without them dracut never prepares the composefs
+# deployment at /sysroot, so systemd-volatile-root finds no /sysroot/usr.
+- mgmt/bootc.bst
 - freedesktop-sdk.bst:components/fakecap.bst
 - freedesktop-sdk.bst:components/dracut.bst
 - freedesktop-sdk.bst:components/cryptsetup.bst
@@ -70,6 +74,16 @@ config:
       echo "$LIBDIR"
     } > /etc/ld.so.conf
     echo "dracut library path: $LIBDIR"
+    # bootc-root-setup mounts the composefs deployment onto /sysroot. Both it
+    # and systemd-volatile-root are unordered members of initrd-root-fs.target,
+    # but volatile-root resolves /sysroot/usr and fails in emergency mode if it
+    # wins that race. Order it after the root setup that makes /usr exist.
+    install -d /usr/lib/systemd/system/systemd-volatile-root.service.d
+    cat > /usr/lib/systemd/system/systemd-volatile-root.service.d/10-after-bootc.conf <<'EOF'
+    [Unit]
+    After=bootc-root-setup.service
+    Requires=bootc-root-setup.service
+    EOF
     # dracut requires modules.dep in the sandbox root /usr/lib/modules.
     depmod -a "${version}"
     mkdir -p "%{install-root}/usr/lib/modules"
@@ -78,6 +92,8 @@ config:
     if ! dracut --no-hostonly --zstd --reproducible --no-machineid \
            --kver "${version}" \
            --kernel-image "/usr/lib/modules/${version}/vmlinuz" \
+           --add "ostree bootc" \
+           --install /usr/lib/systemd/system/systemd-volatile-root.service.d/10-after-bootc.conf \
            --fstab --verbose -f /initramfs.img > /tmp/dracut.log 2>&1; then
       tail -80 /tmp/dracut.log >&2
       exit 1
@@ -88,6 +104,15 @@ config:
     for lib in libc.so.6 libgcc_s.so.1; do
       lsinitrd /initramfs.img | grep -q "/$lib" || {
         echo "initramfs is missing $lib" >&2
+        exit 1
+      }
+    done
+    # Prove the composefs root setup is sealed into the initramfs. A missing
+    # module leaves /sysroot as the empty mounted partition and the boot fails
+    # at systemd-volatile-root with "/usr not available in old root".
+    for f in bootc-root-setup.service initramfs-setup 10-after-bootc.conf; do
+      lsinitrd /initramfs.img | grep -q "$f" || {
+        echo "initramfs is missing $f" >&2
         exit 1
       }
     done
