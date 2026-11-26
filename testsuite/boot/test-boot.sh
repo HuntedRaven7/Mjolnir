@@ -101,6 +101,10 @@ DIGEST=$(printf '%s\n' "$CMD" | sed -n 's/.*composefs.digest=v1-sha512-12:\([0-9
 pass "installed UKI pins the digest of the image under test"
 
 echo "==> registering the separately signed debug UKI as a second boot entry"
+# The digest computation above uses a short-lived `podman run --rm`, so create
+# a named source container here for the read-only copy of the debug assets.
+sudo podman create --name mjolnir-boot-src "$IMAGE" >/dev/null || \
+  fail "cannot create source container for the debug UKI"
 sudo podman cp mjolnir-boot-src:/boot/mjolnir-debug "$WORK/"
 DBG_EFI=$(sudo find "$WORK/mjolnir-debug" -name '*.efi' -type f | head -1)
 [ -n "$DBG_EFI" ] || fail "debug UKI is missing from the image"
