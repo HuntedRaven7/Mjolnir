@@ -1,17 +1,14 @@
 kind: script
 description: |
-  Final Mjolnir bootc OCI image. It consumes the sanitized rootfs from
-  oci/rootfs.bst (the exact tree whose composefs digest is pinned in the signed
-  UKI) and adds the signed boot artifacts before build-oci turns it into an OCI
-  layout with bootc labels.
+  Final Mjolnir bootc OCI image. The layer is the exact tree that
+  uki/mjolnir-uki.bst hashed for the signed UKI. No file is added to it here:
+  the signed systemd-boot, the UKI and the kargs are already in that tree, and
+  mutating it after signing would invalidate the pinned composefs digest.
 
 build-depends:
 - base/sandbox-tools.bst
 - freedesktop-sdk.bst:components/oci-builder.bst
 - freedesktop-sdk.bst:components/libcap.bst
-- filename: oci/rootfs.bst
-  config:
-    location: /rootfs
 - filename: uki/mjolnir-uki.bst
   config:
     location: /uki
@@ -25,19 +22,10 @@ config:
   commands:
   - |
     set -eu
-    root=/rootfs
-
-    # --- sealed boot: signed UKI with the composefs digest pinned -----------
-    # bootc's composefs backend detects /boot/EFI/Linux/*.efi and installs it
-    # to the ESP; the signed .cmdline carries the exact rootfs digest.
-    mkdir -p "${root}/boot/EFI/Linux"
-    cp -a /uki/boot/EFI/Linux/. "${root}/boot/EFI/Linux/"
-    mkdir -p "${root}/usr/lib/systemd/boot/efi"
-    cp -a /uki/usr/lib/systemd/boot/efi/. "${root}/usr/lib/systemd/boot/efi/"
-    mkdir -p "${root}/usr/share/mjolnir"
-    cp /uki/usr/share/mjolnir/composefs-digest.txt "${root}/usr/share/mjolnir/"
 
     # --- build the OCI layout -----------------------------------------------
+    # /uki/rootfs is the tree the signed UKI pinned, including its /boot/EFI/
+    # Linux UKI and its signed systemd-boot. Do not copy anything into it.
     cd "%{install-root}"
     build-oci <<'EOF'
     mode: oci
@@ -45,7 +33,7 @@ config:
     images:
     - os: linux
       architecture: "%{go-arch}"
-      layer: /rootfs
+      layer: /uki/rootfs
       comment: "Import Mjolnir layer"
       config:
         Labels:

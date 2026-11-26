@@ -2,7 +2,9 @@ kind: script
 description: |
   Kernel, modules and initramfs for bootc. The FSDK kernel element installs
   vmlinuz and modules under /usr/lib/modules/<version>; dracut generates a
-  generic initramfs with systemd as init so the composefs root can be mounted.
+  systemd initramfs with bootc's compiled composefs root setup. The generated
+  archive is then stripped of shells and shell hooks so the shipped boot
+  artifact obeys hard rule 1.
 
 build-depends:
 - base/sandbox-tools.bst
@@ -22,6 +24,12 @@ build-depends:
 - filename: config/files-src.bst
   config:
     location: /config
+- filename: kernel/initramfs-src.bst
+  config:
+    location: /initramfs-tools
+- filename: mgmt/bootc.bst
+  config:
+    location: /bootc
 
 environment:
   LD_PRELOAD: /usr/libexec/fakecap/fakecap.so
@@ -58,14 +66,27 @@ config:
     depmod -a "${version}"
     mkdir -p "%{install-root}/usr/lib/modules"
     cp -a "/usr/lib/modules/${version}" "%{install-root}/usr/lib/modules/"
+    # bootc's dracut module installs only a compiled helper and a native
+    # systemd unit. Its module-setup.sh is a build-time script; nothing from it
+    # is copied into the initramfs as a shell payload.
+    mkdir -p /usr/lib/dracut/modules.d/51bootc
+    cp /bootc/usr/lib/dracut/modules.d/51bootc/module-setup.sh \
+       /usr/lib/dracut/modules.d/51bootc/module-setup.sh
+    cp /bootc/usr/lib/systemd/system/bootc-root-setup.service \
+       /usr/lib/systemd/system/bootc-root-setup.service
+    install -Dm755 /bootc/usr/lib/bootc/initramfs-setup \
+       /usr/lib/bootc/initramfs-setup
+
     # Keep dracut's diagnostics visible when BST truncates the build log.
     if ! dracut --no-hostonly --zstd --reproducible --no-machineid \
            --kver "${version}" \
            --kernel-image "/usr/lib/modules/${version}/vmlinuz" \
-           --fstab --verbose -f /initramfs.img > /tmp/dracut.log 2>&1; then
+           --add bootc \
+           --fstab --verbose -f /initramfs.raw > /tmp/dracut.log 2>&1; then
       tail -80 /tmp/dracut.log >&2
       exit 1
     fi
+    /initramfs-tools/sanitize-initramfs.sh /initramfs.raw /initramfs.img
     install -Dm644 /initramfs.img \
       "%{install-root}/usr/lib/modules/${version}/initramfs.img"
     depmod -b "%{install-root}/usr" -a "${version}"

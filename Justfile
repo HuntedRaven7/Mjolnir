@@ -83,6 +83,8 @@ test:
     python3 tests/test_state_reset.py
     python3 tests/test_attestation_verifier.py
     python3 tests/test_fleet_varlink.py
+    python3 tests/test_initramfs_policy.py
+    python3 tests/test_initramfs_sanitizer.py
     python3 tests/test_update_pins.py
     python3 tests/test_pins.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"
@@ -104,6 +106,12 @@ disk size="32G":
       "{{image_name}}:{{image_tag}}" \
       bootc install to-disk --composefs-backend --via-loopback /data/build/bootable.raw \
         --filesystem btrfs --wipe --bootloader systemd
+
+# Full install + OVMF boot proof. Requires root, KVM, QEMU and OVMF.
+boot-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exec bash "{{justfile_directory()}}/testsuite/boot/test-boot.sh" "{{image_name}}:{{image_tag}}"
 
 # Boot the raw disk image headlessly with a serial console.
 vm:

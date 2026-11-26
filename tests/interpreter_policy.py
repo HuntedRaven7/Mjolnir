@@ -41,6 +41,18 @@ SECTIONS = (
     "login_shell",
 )
 
+# A member of the initramfs whose name is one of these is an interpreter
+# binary, regardless of whether it is a regular file or a symlink.
+INTERPRETER_BASENAME = re.compile(
+    r"(?:sh|bash|dash|zsh|fish|python[0-9.]*|perl(?:-[0-9.]+)?|ruby|lua|"
+    r"node|php|tcl|guile|awk|gawk)"
+)
+
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+CPIO_MAGIC = (b"070701", b"070702")
+CPIO_HEADER = 110
+CPIO_TRAILER = "TRAILER!!!"
+
 
 @dataclass
 class Allowlist:
@@ -175,6 +187,121 @@ def check_content(files: Iterable[tuple[str, bytes]], allow: Allowlist) -> list[
                         "allowlisted (content_elf); add an entry with a reason in "
                         "tests/interpreter-allowlist.json or drop the dependency"
                     )
+    return errors
+
+
+@dataclass(frozen=True)
+class InitramfsMember:
+    """One cpio entry from the compressed initramfs."""
+    path: str
+    mode: int
+    payload: bytes
+
+
+def _align4(offset: int) -> int:
+    return (offset + 3) & ~3
+
+
+def _parse_cpio(blob: bytes, start: int) -> tuple[int, list[InitramfsMember]]:
+    """Parse one newc/crc cpio archive; return (offset past it, members)."""
+    members: list[InitramfsMember] = []
+    offset = start
+    while True:
+        if offset + CPIO_HEADER > len(blob):
+            raise ValueError("truncated cpio header")
+        magic = blob[offset:offset + 6]
+        if magic not in CPIO_MAGIC:
+            raise ValueError(f"bad cpio magic {magic!r}")
+        fields = blob[offset:offset + CPIO_HEADER].decode("ascii")
+        vals = [int(fields[i:i + 8], 16) for i in range(6, 102, 8)]
+        mode, filesize, namesize = vals[1], vals[6], vals[11]
+
+        name_start = offset + CPIO_HEADER
+        name_end = name_start + namesize
+        if name_end > len(blob):
+            raise ValueError("truncated cpio name")
+        name = blob[name_start:name_end].split(b"\0", 1)[0].decode("utf-8", "replace")
+        data_start = _align4(name_end)
+        data_end = data_start + filesize
+        if data_end > len(blob):
+            raise ValueError("truncated cpio data")
+        payload = blob[data_start:data_end]
+        offset = _align4(data_end)
+
+        if name == CPIO_TRAILER:
+            return offset, members
+        path = name[2:] if name.startswith("./") else name.lstrip("/")
+        members.append(InitramfsMember(path=path, mode=mode, payload=payload))
+
+
+def iter_initramfs_members(blob: bytes) -> list[InitramfsMember]:
+    """Walk a dracut initramfs.
+
+    Dracut prepends optional uncompressed cpio archives (early microcode) before
+    a zstd-compressed newc/crc cpio archive. Every member is exposed so the gate
+    can inspect paths inside the archive, not just the top-level image tar.
+    """
+    import compression.zstd  # Python 3.14 stdlib; available on the CI runner.
+
+    members: list[InitramfsMember] = []
+    pos = 0
+    while pos < len(blob):
+        # Dracut pads each concatenated archive with zero bytes to an alignment
+        # boundary. Skip that padding before looking for the next archive magic.
+        if blob[pos] == 0:
+            pos += 1
+            continue
+        if blob[pos:pos + 6] in CPIO_MAGIC:
+            pos, entries = _parse_cpio(blob, pos)
+            members.extend(entries)
+            pos = _align4(pos)
+        elif blob[pos:pos + 4] == ZSTD_MAGIC:
+            raw = compression.zstd.ZstdDecompressor().decompress(blob[pos:])
+            inner = 0
+            while inner < len(raw) and raw[inner:inner + 6] in CPIO_MAGIC:
+                inner, entries = _parse_cpio(raw, inner)
+                members.extend(entries)
+                inner = _align4(inner)
+            break
+        else:
+            raise ValueError(
+                f"unexpected initramfs data at offset {pos}: {blob[pos:pos + 6]!r}"
+            )
+    return members
+
+
+def _is_interpreter_name(path: str) -> bool:
+    name = path.rstrip("/").rsplit("/", 1)[-1]
+    return bool(INTERPRETER_BASENAME.fullmatch(name))
+
+
+def check_initramfs(members: Iterable[InitramfsMember]) -> list[str]:
+    """Fail on any interpreter binary or shebang script inside the initramfs.
+
+    There is deliberately no allowlist parameter. Hard rule 1 covers boot
+    artifacts, so a shell in the initramfs is a violation even if a script in
+    `/usr` would be allowlisted. The only way to make this check pass is to
+    remove the offenders from the initramfs or redesign the boot path without
+    an interpreter.
+    """
+    errors: list[str] = []
+    for member in members:
+        if not member.path:
+            continue
+        reasons = []
+        if _is_interpreter_name(member.path):
+            reasons.append("interpreter binary")
+        is_regular = (member.mode & 0o170000) == 0o100000
+        if is_regular and member.payload.startswith(b"#!"):
+            shebang = member.payload.split(b"\n", 1)[0].decode("utf-8", "replace")
+            reasons.append(f"shebang {shebang!r}")
+        if not reasons:
+            continue
+        errors.append(
+            f"[initramfs] {' + '.join(reasons)} at /{member.path} violates hard "
+            "rule 1; remove it from the initramfs or redesign the boot path "
+            "without an interpreter"
+        )
     return errors
 
 

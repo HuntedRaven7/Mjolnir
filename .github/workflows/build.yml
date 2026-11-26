@@ -35,6 +35,8 @@ jobs:
           python3 tests/test_attestation_verifier.py
           python3 tests/test_fleet_varlink.py
           python3 tests/test_fleet_runner.py
+          python3 tests/test_initramfs_policy.py
+          python3 tests/test_initramfs_sanitizer.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.
@@ -123,6 +125,31 @@ jobs:
       - name: bootc lint
         run: just lint
 
+      # Rechunk the image into update-friendly OCI layers using the shared
+      # action. The BuildStream/FSDK image has no RPM database, so we use the
+      # buildah path (no fakecap xattr manifest) and skip
+      # apply-pkg-intervals. force-compression stays false to keep the
+      # ostree.components layer annotations intact.
+      # This must run before the install: bootc's composefs backend cannot read
+      # the single large BuildStream layer ("Unexpected EOF in splitstream"),
+      # so the boot harness has to install the same rechunked image that is
+      # published below.
+      - name: Rechunk image with chunkah
+        uses: projectbluefin/actions/bootc-build/chunka@3ab43283cb0ec8bc62aa18208ccc4978a0fd4c44 # v1
+        with:
+          source-image: localhost/mjolnir:latest
+          max-layers: "128"
+          source-date-epoch: auto
+
+      # The install checks that bootc accepts the signed digest, and the OVMF
+      # boot checks that the shell-free initramfs actually mounts the composefs
+      # root and reaches user space. A static content check cannot prove that.
+      - name: Install and boot test (OVMF)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 ovmf binutils
+          just boot-test
+
       - name: Export image for scanning
         run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest
 
@@ -134,18 +161,6 @@ jobs:
           severity-threshold: CRITICAL
           exit-code: '0'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Rechunk the image into update-friendly OCI layers using the shared
-      # action. The BuildStream/FSDK image has no RPM database, so we use the
-      # buildah path (no fakecap xattr manifest) and skip
-      # apply-pkg-intervals. force-compression stays false to keep the
-      # ostree.components layer annotations intact.
-      - name: Rechunk image with chunkah
-        uses: projectbluefin/actions/bootc-build/chunka@da0469cf14f4b714f3756fe66454a207459924e9 # v1
-        with:
-          source-image: localhost/mjolnir:latest
-          max-layers: "128"
-          source-date-epoch: auto
 
       # The pushed :testing image is the candidate for the manual :stable
       # promotion in execute-release.yml. Downstream jobs pull :testing after
