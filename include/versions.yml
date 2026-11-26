@@ -69,5 +69,5 @@ variables:
   # -------------------------------------------------------------------------
   varlink-bridge-commit: "f14cc14e8ab5143ebf67140cbd884d703a0567be"
   varlink-httpd-amd64-sha256: "8ce2a8ddaed5152d20c445f275fadaef976ffe9828527c24e1c1e32f1a12a3c5"
-  # arm64 binary is not produced yet; the x86_64 image is the first build target.
+  # Both binaries are committed under files/varlink/ and checked by tests/test_pins.py.
   varlink-httpd-arm64-sha256: "f31dde8f3e30530f46558f03cf7b191fc4e18a8dc288eebc0ede3d7976e46f47"

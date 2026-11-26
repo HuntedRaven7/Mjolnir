@@ -11,7 +11,7 @@ Mjolnir uses a two-branch, digest-promotion release model adapted from
 | `stable` | no | **no** | `:stable` | Production pointer, moved only by digest promotion. |
 | `main` | no | no | — | Historical pointer; retained for compatibility, not built. |
 
-The build, plugin, multinode, quality and E2E workflows run on `testing`.
+The build, plugin, multinode and quality workflows run on `testing`.
 Pushes to `stable` do not trigger a rebuild — the branch exists so downstream
 consumers and humans have a stable ref, and so the release workflow can record
 the promoted commit.
