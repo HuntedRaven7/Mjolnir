@@ -10,7 +10,7 @@ variables:
   # -------------------------------------------------------------------------
   # Kubernetes (upstream kubeadm; no k0s)
   # -------------------------------------------------------------------------
-  kubernetes-version: "1.37.2"
+  kubernetes-version: "1.37.3"
   pause-image: "registry.k8s.io/pause:3.10.1"
 
   kubelet-amd64-sha256: "a0e0c4baca9d7e1e0a674359f1615b562a1091dc414c6f7a6094ec23aa2cbe59"
