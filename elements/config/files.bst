@@ -31,6 +31,8 @@ config:
       /config/bootc/kargs.d/50-volatile.toml \
       /config/bootc/kargs.d/60-journal-console.toml \
       "${root}/usr/lib/bootc/kargs.d/"
+    install -Dm644 /config/repart.d/10-mjolnir-esp.conf \
+      "${root}/usr/lib/repart.d/10-mjolnir-esp.conf"
     install -Dm644 /config/repart.d/20-mjolnir-state.conf \
       "${root}/usr/lib/repart.d/20-mjolnir-state.conf"
     install -Dm644 /config/journald/10-persistent.conf \

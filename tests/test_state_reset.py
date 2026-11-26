@@ -52,6 +52,21 @@ def check() -> list[str]:
     if not re.search(r"^Type=linux-generic\s*$", repart, re.MULTILINE):
         errors.append("repart.d: encrypted state must use linux-generic so only the explicit mount binds it")
 
+    # With --run-repart bootc generates only root. The image must ship an ESP
+    # definition or bootloader installation fails with "ESP partition not found".
+    esp_defs = [
+        path for path in (ROOT / "files/config/repart.d").glob("*.conf")
+        if re.search(r"^Type=esp\s*$", path.read_text(), re.MULTILINE)
+    ]
+    if not esp_defs:
+        errors.append("repart.d: missing Type=esp definition for --run-repart installs")
+    else:
+        esp_text = "\n".join(path.read_text() for path in esp_defs)
+        if not re.search(r"^Format=vfat\s*$", esp_text, re.MULTILINE):
+            errors.append("repart.d: ESP definition must format vfat")
+        if not re.search(r"^SizeMinBytes=\d+G\s*$", esp_text, re.MULTILINE):
+            errors.append("repart.d: ESP definition has no minimum size")
+
     crypttab = text("files/config/crypttab")
     if not re.search(
         r"^mjolnir-state\s+/dev/disk/by-partlabel/MjolnirState\s+-\s+"
