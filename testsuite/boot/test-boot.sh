@@ -156,7 +156,10 @@ pass "booted image reached user space (Varlink socket is accepting)"
 
 echo "==> checking the booted kernel command line and unit state"
 [ -s "$SERIAL" ] || fail "VM produced no serial output"
-grep -q 'Command line:' "$SERIAL" || fail "kernel cmdline not visible on serial console"
+# Linux 7.3 renamed the early boot printk from "Command line:" to
+# "Kernel command line:" (print_kernel_cmdline in init/main.c). Match either
+# casing so the assertion reads the booted cmdline, not one kernel's spelling.
+grep -qi 'command line:' "$SERIAL" || fail "kernel cmdline not visible on serial console"
 grep -q "composefs.digest=v1-sha512-12:$EXPECTED" "$SERIAL" || \
   fail "booted cmdline lost the pinned composefs digest"
 grep -q 'systemd.volatile=yes' "$SERIAL" || fail "booted cmdline lost systemd.volatile=yes"
