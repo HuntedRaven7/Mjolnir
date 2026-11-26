@@ -30,6 +30,11 @@ jobs:
         run: |
           python3 tests/test_units.py
           python3 tests/test_diagnostics.py
+      # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
+      # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
+      # does not enable it yet. The boot test must cover the loaded modules.
+      - name: Cilium kernel config options
+        run: python3 tests/test_kernel_config.py --known-gap VXLAN
       - name: BuildStream graph
         run: just validate
 
@@ -228,11 +233,15 @@ jobs:
           fi
           just cache-push
 
-  # Validate the aarch64 element graph and pins. A full cross-build is not
-  # possible with the pinned bst2 image: buildbox-run reports
+  # Check what can be checked for aarch64 without compiling: the committed
+  # arm64 varlink pin, upstream availability of every arm64 source pin, and the
+  # aarch64 element graph. Verified: pins exist, URLs serve, graph resolves.
+  # NOT verified: sha256 at fetch (BuildStream does that in a real build),
+  # compilation, linking, an aarch64 OCI image, or boot. A full cross-build is
+  # not possible with the pinned bst2 image: buildbox-run reports
   # "ISA 'aarch64' is not supported by buildbox-run" as soon as an element
-  # needs to compile locally. That needs a remote-execution worker (or an
-  # aarch64 runner), which this repo does not have yet.
+  # needs to compile locally. That needs a remote-execution worker or an
+  # aarch64 runner, neither of which this repo has yet. See docs/BUILD.md.
   validate-arm64:
     needs: validate
     runs-on: ubuntu-26.04
@@ -243,6 +252,12 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: just
+
+      - name: Check committed arm64 pins
+        run: python3 tests/test_pins.py
+
+      - name: Check arm64 source availability
+        run: python3 tests/test_arm64_pins.py
 
       - name: Resolve aarch64 element graph
         run: just bst -o arch aarch64 show oci/mjolnir.bst

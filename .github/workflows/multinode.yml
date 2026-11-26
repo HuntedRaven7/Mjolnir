@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      # python3 is preinstalled on ubuntu-24.04 and the harness uses only the
+      # python3 is preinstalled on the runner and the harness uses only the
       # stdlib (json/sys), so no setup-python step (and no action pin) is needed.
 
       - name: Create kind clusters
