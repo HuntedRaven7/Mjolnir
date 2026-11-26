@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the fleet diagnostics contract and journal forwarding setup.
+"""Check the fleet diagnostics contract and journal credential documentation.
 
 This is a static check plus a real run of the provisioning credential tool.
 Image content is checked by test_boot_assets.py after the CI build.
@@ -62,8 +62,17 @@ def main() -> int:
         errors.append("UKI does not assert the signed console karg")
 
     provisioning = (ROOT / "docs/PROVISIONING.md").read_text()
-    if "journal.forward_to_socket" not in provisioning:
-        errors.append("PROVISIONING.md does not list journal.forward_to_socket")
+    for phrase in ("no journald drop-in sets `ForwardToSocket=`",
+                   "Journald forwarding is not enabled"):
+        if phrase not in provisioning:
+            errors.append(f"PROVISIONING.md no longer states: {phrase}")
+    if "sets journald's `ForwardToSocket=`" in provisioning:
+        errors.append("PROVISIONING.md again claims journald consumes the credential")
+    for unit_dir in (ROOT / "files/config/systemd", ROOT / "files/varlink/units",
+                     ROOT / "plugins/console/files/systemd"):
+        for unit in unit_dir.glob("*"):
+            if unit.is_file() and "journal.forward_to_socket" in unit.read_text():
+                errors.append(f"{unit.name} imports the unused journal credential")
 
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "cred"
