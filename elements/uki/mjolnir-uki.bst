@@ -155,6 +155,10 @@ config:
     # here does not invalidate the digest computed above.
     install -Dm644 "$WORK/mjolnir.efi" \
       "${ROOTFS}/boot/EFI/Linux/mjolnir-${kver}.efi"
+    # Publish the pinned digest under /boot for attestation. composefs empties
+    # /boot before hashing, so this cannot make the pin self-referential.
+    install -Dm644 "%{install-root}/usr/share/mjolnir/composefs-digest.txt" \
+      "${ROOTFS}/boot/mjolnir-composefs-digest.txt"
     install -Dm644 "$WORK/mjolnir-debug.efi" \
       "${ROOTFS}/boot/mjolnir-debug/mjolnir-debug-${kver}.efi"
     cat > "${ROOTFS}/boot/mjolnir-debug/mjolnir-debug.conf" <<EOF
