@@ -62,11 +62,19 @@ CONTAINER=oci
    it applies Cilium, then KubeStellar and the Console manifests.
 7. **Worker**: `mjolnir-join.service` reads the bootstrap token and CA hash
    from credentials and execs `kubeadm join`.
-8. Updates are `bootc upgrade --download-only`; a staged update sets
+8. `systemd-repart` creates the encrypted `MjolnirState` partition with an
+   empty first-boot key; `mjolnir-state-enroll.service` replaces it with a TPM2
+   slot bound to PCR 7 and the signed PCR 11 policy embedded in the signed UKI.
+9. Updates are `bootc upgrade --download-only`; a staged update sets
    `/run/reboot-required`. **kured** (pinned DaemonSet, signal reboot method)
    drains the node and reboots it under a cluster-wide lock annotation. bootc
    rolls back a staged deployment that fails to come up, so no separate
    rollback mechanism is needed.
+10. Scoped reset runs through Varlink (`FactoryReset`/`ResetPreflight`), which
+   starts a compiled helper. The helper checks sealed credentials, topology and
+   snapshot state, drains with `kubectl`, then removes an explicit path list.
+   Full reset requests a systemd factory reset; repart recreates the state
+   partition and TPM enrollment repeats.
 
 ## 4. Enforcing "no shell / no SSH / no interpreters"
 
@@ -155,7 +163,8 @@ a Varlink interface.
 | 4 | Everything Measured | signed UKI (PCR 11), composefs digest pinned in `.cmdline`, TPM PCR evidence; full `TPM2_Quote` attestation is future work |
 | 5 | No SUID/SGID or File Capabilities | stripped at build time; capabilities via units |
 | 6 | Integrity Is Mandatory | signed UKI + composefs verity seal (no externally supplied kargs), pinned image digests, no mutable fetches |
-| 7 | Factory Reset Is Built In | `systemd-factory-reset` unit with sealed key |
+| 7 | Factory Reset Is Built In | Scoped `mjolnir-helper reset` with sealed credentials, snapshot/member gates and `systemd-factory-reset` for full resets |
+| - | Encrypted State | LUKS2 `MjolnirState` with a signed PCR 11 + PCR 7 TPM2 policy; public PCR key is embedded in the signed UKI |
 
 ## 10. Build and CI pipeline
 

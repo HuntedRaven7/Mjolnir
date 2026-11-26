@@ -1,0 +1,5 @@
+# MjolnirState: created by systemd-repart with an empty LUKS2 key, then
+# re-enrolled to a signed PCR 11 policy plus raw PCR 7 by
+# mjolnir-state-enroll.service. The empty slot is wiped on enrollment.
+# by-partlabel is a discoverable path; no device node is hardcoded.
+mjolnir-state /dev/disk/by-partlabel/MjolnirState - tpm2-device=auto,try-empty-password,headless,x-initrd.attach

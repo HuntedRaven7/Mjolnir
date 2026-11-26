@@ -102,23 +102,54 @@ The script exits non-zero when the verdict is false. Supplying no expectations
 still validates the report shape and method. The node never sets `verified`;
 the CRD schema allows that field only for the verifier.
 
+## Encrypted state and signed PCR 11 policy
+
+`MjolnirState` is a LUKS2 partition created by `systemd-repart` with an empty
+first-boot slot. `mjolnir-state-enroll.service` replaces that slot with a TPM2
+enrollment bound to **PCR 7** (Secure Boot state) and a **signed PCR 11
+policy**. Enrollment uses `systemd-cryptenroll` and fails closed when the
+signature or public key from the signed UKI is absent.
+
+The PCR signing key is generated or injected only in the signing-only
+`uki/boot-keys.bst` artifact. `ukify` embeds the `.pcrsig` signature and
+`.pcrpkey` public key in each signed UKI; `systemd-stub` exposes them to the
+initrd, so a UKI upgrade keeps unsealing the state without re-enrollment. Only
+public key material is published. No key is stored in the repository or in the
+runtime image's configuration.
+
+The initramfs is built with the dracut `crypt` module and the systemd TPM2
+cryptsetup token plugin, whose ELF dependencies pull in `tpm2-tss`. It includes
+the build-time `/etc/crypttab`.
+
 ## Factory reset
 
-`io.mjolnir.Fleet.FactoryReset` requires an explicit
-`{"confirm":"factory-reset"}` parameter. It starts `mjolnir-factory-reset.target`
-over sd-bus; systemd persists the request in the `FactoryResetRequest` EFI
-variable and reboots via `SuccessAction=reboot`.
+`io.mjolnir.Fleet.FactoryReset` requires a `scope`
+(`node-identity`, `etcd-data`, `full`) and an exact confirmation string
+`factory-reset:<scope>`. `io.mjolnir.Fleet.ResetPreflight` reports readiness
+without changing state; `io.mjolnir.Fleet.SnapshotNow` starts the snapshot unit.
 
-The state partition is marked `FactoryReset=yes` in `repart.d`, so systemd-repart
-deletes and recreates it in the initrd on the reset boot — this is what actually
-wipes the allowlist (kubelet certs, WiFi profiles, join state). The stock
-`factory-reset.target` asks for physical confirmation to clear EFI/TPM, so our
-target omits those units for headless operation.
+The scoped helper (`mjolnir-helper reset <scope>`) is a fail-closed state
+machine. It requires a TPM2-sealed `reset-confirm` credential matching the
+scope, discovers the control-plane topology, and only then cordons and drains
+the node with `kubectl` before removing an explicit path allowlist:
 
-After a reset the controller must re-provision credentials (kubelet bootstrap,
-WiFi PSK, Varlink client CA) and rotate the machine-id karg. Coordinate the
-reset with kured by cordoning/draining the node first; factory reset does not go
-through kured's sentinel.
+- `node-identity`: kubelet configs and certs, the state partition's
+  `/etc/machine-id` and WiFi profiles (the bind-mount sources, not the mounts).
+- `etcd-data`: `/var/lib/etcd`, its persistent backing store, and control-plane
+  PKI plus kubeadm kubeconfigs.
+- `full`: both of the above, then `mjolnir-factory-reset.target`; systemd-repart
+  deletes and recreates the state partition on the reset boot.
+
+On a lone control plane, `etcd-data` and `full` additionally require a second
+sealed credential and a snapshot uploaded off-node within the last 24 hours.
+On multiple control planes the node's etcd member is removed from the quorum
+before its data is wiped. The stock `factory-reset.target` asks for physical
+confirmation to clear EFI/TPM, so our target omits those units for headless
+operation.
+
+After a reset the controller must re-provision credentials and rotate the
+machine-id. The helper drains through `kubectl`, not kured's sentinel, so a
+reset does not race a staged bootc update.
 
 ## Reproducibility
 

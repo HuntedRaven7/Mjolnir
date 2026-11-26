@@ -78,7 +78,9 @@ lint:
 # Content assertions (no shell/interpreter, no SUID, pinned manifests).
 test:
     python3 tests/test_units.py
+    python3 tests/test_member_id.py
     python3 tests/test_diagnostics.py
+    python3 tests/test_state_reset.py
     python3 tests/test_update_pins.py
     python3 tests/test_pins.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"

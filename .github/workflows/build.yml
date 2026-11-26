@@ -29,7 +29,9 @@ jobs:
       - name: Static checks
         run: |
           python3 tests/test_units.py
+          python3 tests/test_member_id.py
           python3 tests/test_diagnostics.py
+          python3 tests/test_state_reset.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.
@@ -101,6 +103,16 @@ jobs:
         run: |
           just bst build oci/mjolnir.bst
           just export
+
+      - name: Show BuildStream failure logs
+        if: failure()
+        run: |
+          for log in "$HOME"/.cache/buildstream/logs/mjolnir/kernel-initramfs/*-build.*.log \
+                     "$HOME"/.cache/buildstream/logs/mjolnir/uki-mjolnir-uki/*-build.*.log; do
+            [ -f "$log" ] || continue
+            echo "===== $log ====="
+            cat "$log"
+          done
 
       - name: Image content checks
         run: just test

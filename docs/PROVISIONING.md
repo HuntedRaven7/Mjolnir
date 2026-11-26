@@ -26,6 +26,34 @@ Mount the resulting directory where the provisioning system expects it (for
 example `/run/credentials/@system/`). Never commit it: add it to `.gitignore` or
 keep it outside the repository.
 
+For snapshots add `--snapshot-url https://... [--snapshot-token TOKEN]` to the
+same invocation. The URL must be HTTPS; both values are written as 0600 files.
+
+### Sealed reset credentials
+
+Factory reset requires encrypted credentials delivered as systemd credentials
+(`/run/credentials/@system/reset-confirm.cred` and `reset-lone-cp.cred`). They
+are sealed to the signed PCR 11 policy so they are readable only by a trusted
+boot. Create them off-node with the public key extracted from the signed UKI
+(the public half is not a secret), then place the `.cred` files in the
+provisioning credential directory:
+
+```sh
+objcopy -O binary -j .pcrpkey mjolnir.efi tpm2-pcr-public-key.pem
+printf 'factory-reset:etcd-data' | \
+  systemd-creds encrypt --name=reset-confirm --with-key=tpm2 \
+    --tpm2-public-key=tpm2-pcr-public-key.pem - \
+    reset-confirm.cred
+printf 'lone-cp-etcd-wipe-v1' | \
+  systemd-creds encrypt --name=reset-lone-cp --with-key=tpm2 \
+    --tpm2-public-key=tpm2-pcr-public-key.pem - \
+    reset-lone-cp.cred
+```
+
+Use the confirmation string for the scope you intend to allow. The helper
+checks the decrypted value before any file is removed. Without both files the
+reset units fail closed.
+
 ## Required credentials
 
 | Name | Used by | Meaning |
@@ -39,6 +67,8 @@ keep it outside the repository.
 | `varlink-httpd.tls.trust` | varlink-httpd | PEM CA used to verify mTLS clients |
 | `journal.forward_to_socket` | journald | optional socket address for off-node journal export |
 | `registry-user`, `registry-token` | provisioning | optional GHCR credentials for the image pull |
+| `etcd-snapshot-url`, `etcd-snapshot-token` | etcd snapshot | HTTPS destination and bearer token for off-node snapshots |
+| `reset-confirm`, `reset-lone-cp` | reset services | TPM2-sealed confirmations, created off-node as `.cred` files |
 
 `wifi-*` credentials are optional; without them the node uses wired networking
 only. `join-*` credentials are required on workers and ignored on the control

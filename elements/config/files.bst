@@ -19,6 +19,10 @@ config:
       /config/kubeadm-init.yaml > "${root}/etc/mjolnir/kubeadm-init.yaml"
     # Impermanent root: /etc and /var are tmpfs each boot. Persistent state
     # is re-attached by native .mount units from /usr (fstab is ephemeral).
+    # crypttab is consumed by dracut at build time and rehydrated into the
+    # volatile /etc at boot. Only mapping options are stored; no keys.
+    install -Dm644 /config/crypttab "${root}/etc/crypttab"
+    install -Dm644 /config/crypttab "${root}/usr/share/factory/etc/crypttab"
     install -Dm644 /config/bootc/kargs.d/50-volatile.toml \
       "${root}/usr/lib/bootc/kargs.d/50-volatile.toml"
     install -Dm644 /config/bootc/kargs.d/60-journal-console.toml \
@@ -47,7 +51,7 @@ config:
     install -Dm644 /config/presets/80-mjolnir.preset \
       "${root}/usr/lib/systemd/system-preset/80-mjolnir.preset"
     mkdir -p "${root}/usr/lib/systemd/system"
-    cp /config/systemd/*.service /config/systemd/*.socket \
+    cp /config/systemd/*.service /config/systemd/*.socket /config/systemd/*.timer \
       "${root}/usr/lib/systemd/system/" 2>/dev/null || true
     install -Dm644 /config/sysusers.d/mjolnir.conf "${root}/usr/lib/sysusers.d/mjolnir.conf"
     install -Dm644 /config/tmpfiles.d/mjolnir.conf "${root}/usr/lib/tmpfiles.d/mjolnir.conf"

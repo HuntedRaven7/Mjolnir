@@ -34,6 +34,27 @@ by `systemd-tmpfiles` rules in `/usr/lib/tmpfiles.d/mjolnir-volatile.conf`
 | `/var/log/journal` | Persistent journal (keyed by the stable machine-id) |
 | `/etc/kubernetes` | kubeadm-generated configuration |
 
+The whole partition is LUKS2. `systemd-repart` creates it with an empty
+first-boot slot; `mjolnir-state-enroll.service` replaces that slot with a TPM2
+enrollment bound to PCR 7 and a signed PCR 11 policy. A new signed UKI keeps
+the policy valid because the policy trusts signatures, not a fixed PCR value.
+The initramfs carries the `crypt` dracut module and the systemd TPM2 cryptsetup
+token plugin so unlock and enrollment work before `/usr` is available.
+
+## Reset scopes
+
+`mjolnir-helper reset <scope>` uses an explicit path allowlist after a
+fail-closed preflight (sealed confirmation, topology, snapshot or etcd member
+removal) and a `kubectl` cordon/drain:
+
+- `node-identity` removes kubelet certs and kubeconfig, machine-id and WiFi
+  profiles. etcd and control-plane PKI stay intact.
+- `etcd-data` removes `/var/lib/etcd`, its persistent backing store and
+  control-plane PKI. It requires a fresh off-node snapshot on a lone control
+  plane, or etcd member removal on a multi-control-plane cluster.
+- `full` does both and requests a systemd factory reset, which recreates the
+  state partition and repeats TPM enrollment on the next boot.
+
 kured's cluster-wide lock lives in the Kubernetes API, not on the host, so it
 needs no local persistence.
 

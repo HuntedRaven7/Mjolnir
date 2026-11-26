@@ -1,0 +1,19 @@
+[Unit]
+Description=Mjolnir factory reset: local etcd data and control-plane PKI
+Documentation=man:systemd-cryptenroll(1)
+Wants=network-online.target
+After=network-online.target var-lib-mjolnir.mount var-lib-etcd.mount
+
+[Service]
+Type=oneshot
+LoadCredentialEncrypted=reset-confirm:/run/credentials/@system/reset-confirm.cred
+LoadCredentialEncrypted=reset-lone-cp:/run/credentials/@system/reset-lone-cp.cred
+# The lone-control-plane gate reads etcd-snapshot-* from the system credential
+# directory through the helper's credential reader.
+ExecStart=/usr/bin/mjolnir-helper reset etcd-data
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/
+ReadWritePaths=/etc/kubernetes /etc/NetworkManager/system-connections /var/lib/kubelet /var/lib/mjolnir /var/lib/etcd /run/mjolnir
