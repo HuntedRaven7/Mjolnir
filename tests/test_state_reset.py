@@ -30,6 +30,28 @@ def check() -> list[str]:
     if not re.search(r"^FactoryReset=yes\s*$", repart, re.MULTILINE):
         errors.append("repart.d: state partition is not factory-resettable")
 
+    # repart.d accepts DPS identifiers or a GPT UUID, not arbitrary names.
+    # `Type=state` parses nowhere and made bootc install fail in CI.
+    valid_types = {
+        "esp", "xbootldr", "swap", "home", "srv", "var", "tmp", "linux-generic",
+        "root", "root-verity", "root-verity-sig", "root-secondary",
+        "root-secondary-verity", "root-secondary-verity-sig",
+        "usr", "usr-verity", "usr-verity-sig", "usr-secondary",
+        "usr-secondary-verity", "usr-secondary-verity-sig",
+    }
+    arch = (r"alpha|arc|arm|arm64|ia64|loongarch64|mips-le|mips64-le|parisc|"
+            r"ppc|ppc64|ppc64-le|riscv32|riscv64|s390|s390x|tilegx|x86|x86-64")
+    arch_type = re.compile(rf"^(?:root|usr)(?:-(?:{arch}))?(?:-verity(?:-sig)?)?$")
+    uuid_type = re.compile(
+        r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    )
+    for value in re.findall(r"^Type=(\S+)\s*$", repart, re.MULTILINE):
+        if value not in valid_types and not arch_type.match(value) and not uuid_type.match(value):
+            errors.append(f"repart.d: invalid Type={value} (not a DPS identifier or GPT UUID)")
+    if not re.search(r"^Type=linux-generic\s*$", repart, re.MULTILINE):
+        errors.append("repart.d: encrypted state must use linux-generic so only the explicit mount binds it")
+
     crypttab = text("files/config/crypttab")
     if not re.search(
         r"^mjolnir-state\s+/dev/disk/by-partlabel/MjolnirState\s+-\s+"
