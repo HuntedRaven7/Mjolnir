@@ -194,6 +194,11 @@ dnf/Containerfile-specific ones (`setup-runner` with dnf, `dnf-cache`,
 
 ## 11. Open issues
 
+- The image is beta until it has been validated on real hardware in the
+  homelab. Cilium requests `tunnel-protocol: vxlan` while the pinned FSDK
+  kernel config does not enable `CONFIG_VXLAN`. CI cannot close that gap. Beta
+  is expected to last about a year.
+
 - **The image has not yet been proven to boot.** The removed QEMU boot harness
   never reached a successful install: `bootc install` could not reproduce the
   composefs digest embedded in the signed UKI from the final OCI rootfs. A new

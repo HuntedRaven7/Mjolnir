@@ -81,6 +81,7 @@ test:
     python3 tests/test_member_id.py
     python3 tests/test_diagnostics.py
     python3 tests/test_state_reset.py
+    python3 tests/test_attestation_verifier.py
     python3 tests/test_update_pins.py
     python3 tests/test_pins.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"
@@ -101,8 +102,7 @@ disk size="32G":
       \
       "{{image_name}}:{{image_tag}}" \
       bootc install to-disk --composefs-backend --via-loopback /data/build/bootable.raw \
-        --filesystem btrfs --wipe --bootloader systemd \
-        --karg systemd.firstboot=no --karg quiet
+        --filesystem btrfs --wipe --bootloader systemd
 
 # Boot the raw disk image headlessly with a serial console.
 vm:
