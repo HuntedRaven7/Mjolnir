@@ -58,6 +58,12 @@ truncate -s 32G "$WORK/disk.raw"
 # The disk is attached on the host with partition scanning (-P), so the whole
 # device and its partition nodes are complete. DPS stays on and no device path
 # is hardcoded here.
+# --run-repart makes bootc plan the disk from the image's repart.d definitions.
+# With --generic-image it creates root/ESP/BIOS at install and leaves the space
+# systemd-repart needs for MjolnirState on first boot. Without it bootc uses
+# sfdisk only: it grows root over the whole disk, the encrypted state partition
+# never appears, and systemd-cryptsetup@mjolnir-state waits on its device unit
+# without a timeout until the boot test gives up.
 # No --karg: a sealed UKI carries its whole cmdline in the signed .cmdline
 # section, and bootc refuses install-time kargs.
 LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
@@ -67,7 +73,7 @@ sudo podman run --rm --privileged --pid=host --ipc=host \
   -v /var/lib/containers:/var/lib/containers \
   "$IMAGE" \
   bootc install to-disk --composefs-backend --generic-image "$LOOP" \
-    --filesystem btrfs --wipe --bootloader systemd
+    --filesystem btrfs --wipe --bootloader systemd --run-repart
 INSTALL_RC=$?
 set -e
 if [ "$INSTALL_RC" -ne 0 ]; then

@@ -1,7 +1,8 @@
 [install]
 bootloader = "systemd"
-# systemd-repart applies repart.d definitions automatically during install;
-# the old `run-repart` key is rejected by current bootc versions.
+# `run-repart` is a CLI flag, not an install-config key: callers of
+# `bootc install to-disk` must pass --run-repart or bootc falls back to sfdisk,
+# which ignores the repart.d definitions below and reserves no state partition.
 #
 # Do not declare [install.filesystem.root] here: a custom filesystem section
 # makes bootc skip automatic GPT partition typing, and install then fails with
