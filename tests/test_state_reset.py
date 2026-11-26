@@ -91,8 +91,18 @@ def check() -> list[str]:
     for element in ROOT.glob("elements/**/*.bst"):
         if element.name == "boot-keys.bst" or element.name == "mjolnir-uki.bst":
             continue
-        if "uki/boot-keys.bst" in element.read_text():
-            errors.append(f"{element.name}: signing-only key element in runtime stack")
+        body = element.read_text()
+        if "uki/boot-keys.bst" not in body:
+            continue
+        # A signing-only element may consume the keys to sign a public binary.
+        # What must never reach a runtime stack is the key material itself, so
+        # flag any element that stages a staged key into its own artifact.
+        for line in body.splitlines():
+            if "/boot-keys/" not in line or not re.search(r"\.(key|pem)\b", line):
+                continue
+            if "%{install-root}" in line or re.search(r"\$\{?root\}?/", line):
+                errors.append(f"{element.name}: private key staged into runtime artifact")
+                break
 
     # Only public PCR material may be committed. Scan tracked files only:
     # BuildStream stages upstream test keys into the gitignored .bst cache,
