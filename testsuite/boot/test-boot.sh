@@ -11,7 +11,14 @@ IMAGE="${1:-localhost/mjolnir:latest}"
 WORK="${RUNNER_TEMP:-/tmp}/mjolnir-boot-test"
 SERIAL="$WORK/serial.log"
 
-fail() { echo "::error::$*" >&2; exit 1; }
+fail() {
+  echo "::error::$*" >&2
+  if [ -s "${SERIAL:-}" ]; then
+    echo "--- serial console tail at failure ---" >&2
+    tail -80 "$SERIAL" >&2
+  fi
+  exit 1
+}
 pass() { echo "PASS: $*"; }
 need() { command -v "$1" >/dev/null || fail "missing tool: $1"; }
 
@@ -115,23 +122,36 @@ printf '%s\n' "$DBG_CMD" | grep -q "$EXPECTED" || fail "debug UKI pins a differe
 pass "debug UKI is a distinct entry pinning the same verified root"
 
 echo "==> booting the installed disk with OVMF"
-sudo umount "$WORK/esp"
-sudo losetup -d "$LOOP"
+sudo umount "$WORK/esp" || fail "cannot unmount the ESP"
+sudo losetup -d "$LOOP" || fail "cannot detach the install loop device"
 LOOP=""
-OVMF_CODE=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd \
-  /usr/share/edk2/ovmf/OVMF_CODE_4M.fd /usr/share/qemu/OVMF.fd 2>/dev/null | head -1)
-OVMF_VARS=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd \
-  /usr/share/edk2/ovmf/OVMF_VARS_4M.fd /usr/share/qemu/OVMF_VARS.fd 2>/dev/null | head -1)
-[ -n "$OVMF_CODE" ] && [ -n "$OVMF_VARS" ] || fail "OVMF firmware not installed"
-cp "$OVMF_CODE" "$WORK/code.fd"
-cp "$OVMF_VARS" "$WORK/vars.fd"
+# `ls` exits 2 when any candidate is absent, and pipefail turns that into a
+# silent set -e exit before the check below. Probe each candidate so a missing
+# fallback path cannot hide the firmware that is installed.
+OVMF_CODE=""
+for f in /usr/share/OVMF/OVMF_CODE_4M.fd \
+  /usr/share/edk2/ovmf/OVMF_CODE_4M.fd /usr/share/qemu/OVMF.fd; do
+  if [ -f "$f" ]; then OVMF_CODE="$f"; break; fi
+done
+OVMF_VARS=""
+for f in /usr/share/OVMF/OVMF_VARS_4M.fd \
+  /usr/share/edk2/ovmf/OVMF_VARS_4M.fd /usr/share/qemu/OVMF_VARS.fd; do
+  if [ -f "$f" ]; then OVMF_VARS="$f"; break; fi
+done
+[ -n "$OVMF_CODE" ] && [ -n "$OVMF_VARS" ] || \
+  fail "OVMF firmware not installed (code=$OVMF_CODE vars=$OVMF_VARS)"
+cp "$OVMF_CODE" "$WORK/code.fd" || fail "cannot copy OVMF code from $OVMF_CODE"
+cp "$OVMF_VARS" "$WORK/vars.fd" || fail "cannot copy OVMF vars from $OVMF_VARS"
+echo "OVMF_CODE=$OVMF_CODE"
+echo "OVMF_VARS=$OVMF_VARS"
 
 # varlink-httpd requires a client CA credential. The boot-report credential is
 # opt-in; it makes bootc status (including image provenance) appear on the
 # serial console without a shell in the image.
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
-  -keyout "$WORK/ca.key" -out "$WORK/ca.crt" -subj /CN=MjolnirBootTest >/dev/null 2>&1
-CA_B64=$(base64 -w0 "$WORK/ca.crt")
+  -keyout "$WORK/ca.key" -out "$WORK/ca.crt" -subj /CN=MjolnirBootTest >/dev/null 2>&1 || \
+  fail "cannot generate the boot-test CA"
+CA_B64=$(base64 -w0 "$WORK/ca.crt") || fail "cannot encode the boot-test CA"
 
 timeout 240 sudo qemu-system-x86_64 \
   -m 2048 -smp 2 -enable-kvm -nographic \
@@ -149,8 +169,12 @@ for _ in $(seq 1 110); do
   sleep 2
 done
 kill "$QEMU_PID" 2>/dev/null || true
-wait "$QEMU_PID" 2>/dev/null || true
-[ -s "$SERIAL" ] || fail "VM produced no serial output"
+set +e
+wait "$QEMU_PID"
+QEMU_RC=$?
+set -e
+echo "qemu exit status: $QEMU_RC"
+[ -s "$SERIAL" ] || fail "VM produced no serial output (qemu exit $QEMU_RC)"
 
 grep -q 'Command line:' "$SERIAL" || fail "kernel cmdline not visible on serial console"
 grep -q 'composefs.digest=v1-sha512-12:' "$SERIAL" || fail "booted cmdline lost the signed digest"
