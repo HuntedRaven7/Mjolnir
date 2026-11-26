@@ -87,21 +87,40 @@ DIGEST=$(printf '%s\n' "$CMD" | sed -n 's/.*composefs.digest=v1-sha512-12:\([0-9
 pass "installed UKI pins the digest of the image under test"
 
 echo "==> booting the installed disk with OVMF"
-sudo umount "$WORK/esp"
-sudo losetup -d "$LOOP"
+sudo umount "$WORK/esp" || fail "could not unmount the ESP at $WORK/esp"
+sudo losetup -d "$LOOP" || fail "could not detach $LOOP"
 LOOP=""
-OVMF_CODE=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd \
-  /usr/share/edk2/ovmf/OVMF_CODE_4M.fd /usr/share/qemu/OVMF.fd 2>/dev/null | head -1)
-OVMF_VARS=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd \
-  /usr/share/edk2/ovmf/OVMF_VARS_4M.fd /usr/share/qemu/OVMF_VARS.fd 2>/dev/null | head -1)
-[ -n "$OVMF_CODE" ] && [ -n "$OVMF_VARS" ] || fail "OVMF firmware not installed"
-cp "$OVMF_CODE" "$WORK/code.fd"
-cp "$OVMF_VARS" "$WORK/vars.fd"
+
+# `ls a b c | head -1` exits 2 under pipefail when any operand is absent, even
+# when another one exists. That killed this script silently right after the
+# echo above. Probe candidates in preference order and report where we looked.
+first_firmware() {
+  local var=$1 label=$2 candidate
+  shift 2
+  for candidate in "$@"; do
+    if [ -f "$candidate" ]; then
+      printf -v "$var" '%s' "$candidate"
+      return 0
+    fi
+  done
+  fail "$label firmware not found; searched: $*"
+}
+first_firmware OVMF_CODE "OVMF code" \
+  /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd \
+  /usr/share/edk2/ovmf/OVMF_CODE_4M.fd /usr/share/qemu/OVMF.fd
+first_firmware OVMF_VARS "OVMF vars" \
+  /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd \
+  /usr/share/edk2/ovmf/OVMF_VARS_4M.fd /usr/share/qemu/OVMF_VARS.fd
+echo "    OVMF code: $OVMF_CODE"
+echo "    OVMF vars: $OVMF_VARS"
+cp "$OVMF_CODE" "$WORK/code.fd" || fail "could not copy $OVMF_CODE"
+cp "$OVMF_VARS" "$WORK/vars.fd" || fail "could not copy $OVMF_VARS"
 
 # varlink-httpd requires a client CA credential from the provisioning system.
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
-  -keyout "$WORK/ca.key" -out "$WORK/ca.crt" -subj /CN=MjolnirBootTest >/dev/null 2>&1
-CA_B64=$(base64 -w0 "$WORK/ca.crt")
+  -keyout "$WORK/ca.key" -out "$WORK/ca.crt" -subj /CN=MjolnirBootTest >/dev/null 2>&1 \
+  || fail "could not generate the test client CA"
+CA_B64=$(base64 -w0 "$WORK/ca.crt") || fail "could not encode the test client CA"
 
 timeout 300 sudo qemu-system-x86_64 \
   -m 2048 -smp 2 -enable-kvm -nographic \
@@ -125,8 +144,14 @@ for _ in $(seq 1 140); do
   sleep 2
 done
 kill "$QEMU_PID" 2>/dev/null || true
-wait "$QEMU_PID" 2>/dev/null || true
-[ "$ready" = 1 ] || { tail -60 "$SERIAL" >&2; fail "booted image did not open its Varlink socket"; }
+QEMU_RC=0
+wait "$QEMU_PID" 2>/dev/null || QEMU_RC=$?
+[ "$ready" = 1 ] || {
+  echo "    QEMU exited with status $QEMU_RC" >&2
+  echo "    serial log bytes: $(wc -c < "$SERIAL" 2>/dev/null || echo 0)" >&2
+  tail -60 "$SERIAL" >&2 || true
+  fail "booted image did not open its Varlink socket"
+}
 pass "booted image reached user space (Varlink socket is accepting)"
 
 echo "==> checking the booted kernel command line and unit state"
