@@ -1,6 +1,6 @@
 --- a/crates/blockdev/src/blockdev.rs
 +++ b/crates/blockdev/src/blockdev.rs
-@@ -373,16 +373,22 @@
+@@ -373,16 +373,29 @@
          if self.partn.is_none() {
              self.partn = self.read_sysfs_property("partition")?;
          }
@@ -9,11 +9,15 @@
 -        // directly. See https://github.com/osbuild/osbuild/pull/2428
 -        if !have_udev() && (self.parttype.is_none() || self.pttype.is_none()) {
 +        // A udev database can exist without records for partitions created
-+        // after boot, so lsblk may report null parttype/pttype/fstype even
-+        // with udev present. Probe the disk with blkid whenever a field the
-+        // installer needs is missing.
++        // after boot, so lsblk may report null parttype/pttype/fstype/uuid
++        // even with udev present. Probe the disk with blkid whenever a field
++        // the installer needs is missing.
 +        let udev_available = have_udev();
-+        if self.parttype.is_none() || self.pttype.is_none() || self.fstype.is_none() {
++        if self.parttype.is_none()
++            || self.pttype.is_none()
++            || self.fstype.is_none()
++            || self.uuid.is_none()
++        {
 +            tracing::debug!("probing blockdev metadata with blkid (udev: {udev_available})");
              let props = blkid_probe(&self.path())?;
              if self.parttype.is_none() {
@@ -24,6 +28,9 @@
 +            }
 +            if self.fstype.is_none() {
 +                self.fstype = props.get("TYPE").cloned();
++            }
++            if self.uuid.is_none() {
++                self.uuid = props.get("UUID").cloned();
              }
          }
          // Recurse to child devices

@@ -81,6 +81,7 @@ test:
     python3 tests/test_member_id.py
     python3 tests/test_diagnostics.py
     python3 tests/test_state_reset.py
+    python3 tests/test_bootc_patch.py
     python3 tests/test_attestation_verifier.py
     python3 tests/test_fleet_varlink.py
     python3 tests/test_initramfs_policy.py
