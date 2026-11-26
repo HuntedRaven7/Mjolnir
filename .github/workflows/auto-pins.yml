@@ -20,7 +20,7 @@ jobs:
     # Fork PRs cannot be pushed to by the default token; leave those to a
     # maintainer (the build will fail with a clear sha256 mismatch).
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: write
