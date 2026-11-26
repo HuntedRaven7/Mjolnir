@@ -30,6 +30,11 @@ def compare(label: str, expected: str, actual: Any, reasons: list[str]) -> None:
         reasons.append(f"{label}: expected {expected}, got {got or '<missing>'}")
 
 
+def require(label: str, actual: Any, reasons: list[str]) -> None:
+    if not isinstance(actual, str) or not actual.strip():
+        reasons.append(f"{label}: missing evidence")
+
+
 def verify(report: dict[str, Any], args: argparse.Namespace) -> list[str]:
     reasons: list[str] = []
     method = report.get("method", "")
@@ -40,20 +45,28 @@ def verify(report: dict[str, Any], args: argparse.Namespace) -> list[str]:
     if args.expect_method == "tpm2" and method != "tpm2":
         reasons.append("method: TPM2 evidence required")
 
+    uki = report.get("uki") or {}
+    pcrs = report.get("pcrValues") or {}
+    composefs = report.get("usrVerityRootHash")
+    pe_hash = uki.get("peHashSha256")
+    image_digest = report.get("imageDigest")
+    pcr11 = pcrs.get("11")
+    event_log = report.get("eventLogHashSha256")
+
+    require("usrVerityRootHash", composefs, reasons)
+    require("uki.peHashSha256", pe_hash, reasons)
+    require("imageDigest", image_digest, reasons)
+    require('pcrValues["11"]', pcr11, reasons)
+    require("eventLogHashSha256", event_log, reasons)
+
     if args.expect_composefs:
-        compare("usrVerityRootHash", args.expect_composefs,
-                report.get("usrVerityRootHash"), reasons)
+        compare("usrVerityRootHash", args.expect_composefs, composefs, reasons)
     if args.expect_uki_pe:
-        compare("uki.peHashSha256", args.expect_uki_pe,
-                (report.get("uki") or {}).get("peHashSha256"), reasons)
+        compare("uki.peHashSha256", args.expect_uki_pe, pe_hash, reasons)
     if args.expect_image_digest:
-        compare("imageDigest", args.expect_image_digest,
-                report.get("imageDigest"), reasons)
+        compare("imageDigest", args.expect_image_digest, image_digest, reasons)
     if args.expect_pcr11:
-        compare('pcrValues["11"]', args.expect_pcr11,
-                (report.get("pcrValues") or {}).get("11"), reasons)
-    if args.require_event_log and not report.get("eventLogHashSha256"):
-        reasons.append("eventLogHashSha256: missing")
+        compare('pcrValues["11"]', args.expect_pcr11, pcr11, reasons)
     return reasons
 
 

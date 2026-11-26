@@ -18,8 +18,7 @@ python3 scripts/make-credentials.py --out ./cred --role worker \
   --join-token "$TOKEN" --ca-cert-hash "sha256:$HASH" \
   --endpoint control-plane.example:6443 \
   --wifi-ssid homelab --wifi-psk "$PSK" \
-  --tls-ca ./client-ca.pem \
-  --journal-forward-socket collector.example:19532
+  --tls-ca ./client-ca.pem
 ```
 
 Mount the resulting directory where the provisioning system expects it (for
@@ -53,6 +52,14 @@ printf 'lone-cp-etcd-wipe-v1' | \
 Use the confirmation string for the scope you intend to allow. The helper
 checks the decrypted value before any file is removed. Without both files the
 reset units fail closed.
+
+### Journal forwarding credential
+
+`make-credentials.py --journal-forward-socket <address>` also writes a
+`journal.forward_to_socket` credential. No component in the Mjolnir image reads
+it. No unit imports it, no journald drop-in sets `ForwardToSocket=`, and no code
+uses the value. Journald forwarding is not enabled; the file is available only
+to provisioning tooling outside the image.
 
 ## Required credentials
 
@@ -102,14 +109,11 @@ before Kubernetes starts:
   `systemd.journald.forward_to_console=1`. Journald writes warning-level and
   higher entries to the serial console. The kargs live in `kargs.d` and are
   baked into the signed `.cmdline`, so you cannot change them at boot time.
-- The `journal.forward_to_socket` credential sets journald's `ForwardToSocket=`.
-  Journald sends the journal export stream to that address. Run
-  `systemd-journal-remote` on the collector to store it. The node needs no
-  cluster join, token or shell for this path. Leave the credential unset when
-  you do not run a collector.
+- Off-node journal export is not enabled in this image. The provisioning tool
+  can write a `journal.forward_to_socket` credential, but nothing in the image
+  imports or reads it, so journald does not gain a `ForwardToSocket=` setting
+  from it. The serial console above is the only pre-cluster diagnostic path.
 
-Forwarding is synchronous inside journald. A collector that accepts data but
-never reads it can block journald, so use a dedicated receiver and monitor it.
 The serial console carries warnings only, which limits traffic on slow ports.
 No address or key is stored in the image or in this repository.
 

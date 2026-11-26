@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -30,9 +31,13 @@
 #define STATUS_FILE "/run/mjolnir/mjolnirnode.yaml"
 
 // Diagnostics are read-only and bound in both time and output size. The
-// Varlink loop is single threaded, so one stuck command must never hold it.
+// Varlink loop is single threaded, so every child gets a deadline and every
+// wait path either reaps the child or kills it first.
 #define DIAG_TIMEOUT_MS 5000
-#define DEFAULT_TIMEOUT_MS 15000
+#define ACTION_TIMEOUT_MS 15000
+// Staging an image downloads it, so a 15 s deadline would kill a healthy
+// upgrade. Keep a generous bound so the Varlink loop still cannot hang.
+#define UPGRADE_TIMEOUT_MS (15 * 60 * 1000)
 #define DIAG_OUTPUT_MAX 65536
 #define MAX_UNIT_LEN 128
 
@@ -58,7 +63,9 @@ static int exists(const char *path) {
 
 // Run a command, capture at most outsz-1 bytes of stdout, and kill it after
 // timeout_ms. Excess output is drained so a chatty child cannot block on the
-// pipe. Returns the child's exit status, 124 on timeout, or -1 on setup error.
+// pipe. Returns the child's exit status, 124 on timeout, or -1 on an internal
+// error. Every loop exit either reaps the child or kills it before waitpid,
+// so a failed poll or read can never block the Varlink loop forever.
 static int run_capture_timeout(const char *const argv[], char *out, size_t outsz,
                                int timeout_ms) {
     out[0] = '\0';
@@ -80,7 +87,8 @@ static int run_capture_timeout(const char *const argv[], char *out, size_t outsz
     fcntl(fds[0], F_SETFL, O_NONBLOCK);
 
     size_t total = 0;
-    int timed_out = 0;
+    int timed_out = 0, failed = 0, eof = 0, reaped = 0;
+    int status = 0;
     struct timespec start, now;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (;;) {
@@ -89,11 +97,25 @@ static int run_capture_timeout(const char *const argv[], char *out, size_t outsz
                        (now.tv_nsec - start.tv_nsec) / 1000000;
         int remaining = timeout_ms - (int)elapsed;
         if (remaining <= 0) { timed_out = 1; break; }
+        if (eof) {
+            // stdout is closed but the child may still be finishing. Reap
+            // without blocking, or hit the deadline and kill it below.
+            pid_t r = waitpid(pid, &status, WNOHANG);
+            if (r == pid) { reaped = 1; break; }
+            if (r < 0) {
+                if (errno == EINTR) continue;
+                failed = 1; break;
+            }
+            struct timespec nap = { .tv_sec = 0,
+                                    .tv_nsec = (remaining < 20 ? remaining : 20) * 1000000L };
+            nanosleep(&nap, NULL);
+            continue;
+        }
         struct pollfd pfd = { .fd = fds[0], .events = POLLIN };
         int ready = poll(&pfd, 1, remaining);
         if (ready < 0) {
             if (errno == EINTR) continue;
-            break;
+            failed = 1; break;
         }
         if (ready == 0) { timed_out = 1; break; }
         char chunk[4096];
@@ -107,27 +129,34 @@ static int run_capture_timeout(const char *const argv[], char *out, size_t outsz
             }
             continue;
         }
-        if (n == 0) break;
+        if (n == 0) { eof = 1; continue; }
         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
-        break;
+        failed = 1; break;
     }
     out[total] = '\0';
     close(fds[0]);
 
-    if (timed_out) kill(pid, SIGKILL);
-    int status = 0;
-    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    if (!reaped) {
+        // SIGKILL cannot be caught, so this waitpid always terminates.
+        if (timed_out || failed) kill(pid, SIGKILL);
+        pid_t r;
+        do { r = waitpid(pid, &status, 0); } while (r < 0 && errno == EINTR);
+        if (r != pid) failed = 1;
+    }
     if (timed_out) return 124;
+    if (failed) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
+// Status queries and read-only diagnostics: one short deadline for all.
 static int run_capture(const char *const argv[], char *out, size_t outsz) {
-    return run_capture_timeout(argv, out, outsz, DEFAULT_TIMEOUT_MS);
+    return run_capture_timeout(argv, out, outsz, DIAG_TIMEOUT_MS);
 }
 
+// Short cluster actions (publish, clear lock) get a longer deadline.
 static int run_quiet(const char *const argv[]) {
     char buf[4096];
-    return run_capture(argv, buf, sizeof(buf));
+    return run_capture_timeout(argv, buf, sizeof(buf), ACTION_TIMEOUT_MS);
 }
 
 static const char *credential_dir(void) {
@@ -790,7 +819,8 @@ static json_object *dispatch(json_object *req) {
 
     if (!strcmp(method, "io.mjolnir.Fleet.Upgrade")) {
         const char *argv[] = { "/usr/bin/bootc", "upgrade", "--download-only", NULL };
-        int rc = run_quiet(argv);
+        char out[4096];
+        int rc = run_capture_timeout(argv, out, sizeof(out), UPGRADE_TIMEOUT_MS);
         char msg[256];
         snprintf(msg, sizeof(msg), rc == 0 ? "update queued" : "upgrade failed (%d)", rc);
         return action_result("upgrade", msg);
@@ -843,6 +873,15 @@ static json_object *dispatch(json_object *req) {
 }
 
 static void handle_client(int fd) {
+    // The accept loop is single threaded: a client that connects and sends
+    // nothing must not hold it. Reuse the diagnostics deadline so each recv
+    // fails after DIAG_TIMEOUT_MS and the loop can serve the next client.
+    struct timeval deadline = {
+        .tv_sec = DIAG_TIMEOUT_MS / 1000,
+        .tv_usec = (DIAG_TIMEOUT_MS % 1000) * 1000,
+    };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &deadline, sizeof(deadline));
+
     char buf[65536];
     size_t len = 0;
     for (;;) {

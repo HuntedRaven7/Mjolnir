@@ -32,6 +32,11 @@ jobs:
           python3 tests/test_member_id.py
           python3 tests/test_diagnostics.py
           python3 tests/test_state_reset.py
+          python3 tests/test_attestation_verifier.py
+          python3 tests/test_fleet_varlink.py
+          python3 tests/test_fleet_runner.py
+          python3 tests/test_initramfs_policy.py
+          python3 tests/test_initramfs_sanitizer.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.
@@ -136,10 +141,9 @@ jobs:
           max-layers: "128"
           source-date-epoch: auto
 
-      # The install is the digest proof: bootc regenerates the composefs digest
-      # from the final OCI rootfs and refuses to install unless it matches the
-      # one embedded in the signed UKI. The VM boot then checks the signed
-      # cmdline, bootc status, failed units and image provenance.
+      # The install checks that bootc accepts the signed digest, and the OVMF
+      # boot checks that the shell-free initramfs actually mounts the composefs
+      # root and reaches user space. A static content check cannot prove that.
       - name: Install and boot test (OVMF)
         run: |
           sudo apt-get update -qq

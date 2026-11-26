@@ -1,18 +1,14 @@
 kind: script
 description: |
-  Final Mjolnir bootc OCI image. It consumes the complete rootfs from
-  oci/rootfs.bst (the exact tree whose composefs digest is pinned in both
-  signed UKIs) and adds only /boot artifacts before build-oci turns it into an
-  OCI layout with bootc labels. composefs empties /boot before hashing, so the
-  added UKIs cannot invalidate the digest.
+  Final Mjolnir bootc OCI image. The layer is the exact tree that
+  uki/mjolnir-uki.bst hashed for the signed UKI. No file is added to it here:
+  the signed systemd-boot, the UKI and the kargs are already in that tree, and
+  mutating it after signing would invalidate the pinned composefs digest.
 
 build-depends:
 - base/sandbox-tools.bst
 - freedesktop-sdk.bst:components/oci-builder.bst
 - freedesktop-sdk.bst:components/libcap.bst
-- filename: oci/rootfs.bst
-  config:
-    location: /rootfs
 - filename: uki/mjolnir-uki.bst
   config:
     location: /uki
@@ -26,19 +22,11 @@ config:
   commands:
   - |
     set -eu
-    root=/rootfs
 
-    # --- sealed boot: signed UKI with the composefs digest pinned -----------
-    # Only /boot is modified here. The signed systemd-boot loader is already
-    # part of oci/rootfs.bst, so the tree hashed by bootc is unchanged.
-    # bootc detects the single UKI in /boot/EFI/Linux and installs it to the
-    # ESP; the signed .cmdline carries the exact rootfs digest.
-    mkdir -p "${root}/boot/EFI/Linux" "${root}/boot/mjolnir-debug"
-    cp -a /uki/boot/EFI/Linux/. "${root}/boot/EFI/Linux/"
-    cp -a /uki/boot/mjolnir-debug/. "${root}/boot/mjolnir-debug/"
-    cp /uki/boot/mjolnir-composefs-digest.txt "${root}/boot/"
 
     # --- build the OCI layout -----------------------------------------------
+    # /uki/rootfs is the tree the signed UKI pinned, including its /boot/EFI/
+    # Linux UKI and its signed systemd-boot. Do not copy anything into it.
     cd "%{install-root}"
     build-oci <<'EOF'
     mode: oci
@@ -46,7 +34,7 @@ config:
     images:
     - os: linux
       architecture: "%{go-arch}"
-      layer: /rootfs
+      layer: /uki/rootfs
       comment: "Import Mjolnir layer"
       config:
         Labels:
