@@ -40,6 +40,7 @@ required = [
     "/usr/lib/systemd/system/mjolnir-reset-full.service",
     "/usr/lib/systemd/system/mjolnir-etcd-snapshot.service",
     "/usr/lib/systemd/system/mjolnir-etcd-snapshot.timer",
+    "/usr/lib/systemd/system/mjolnir-boot-report.service",
     "/usr/lib/systemd/system/var-lib-mjolnir.mount",
     "/usr/lib/systemd/system/var-lib-etcd.mount",
     "/usr/lib/systemd/system/var-lib-containerd.mount",
