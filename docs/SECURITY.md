@@ -39,24 +39,43 @@ unsigned or unattested `:testing` image can never become `:stable`.
 Mjolnir builds a **signed, sealed Unified Kernel Image (UKI)** using
 `bootc container ukify` (see `elements/uki/mjolnir-uki.bst`):
 
-- `bootc container split-kernel-and-rootfs` extracts the kernel and initramfs
-  from the final rootfs layer.
-- `bootc container ukify` computes the **composefs digest of that exact rootfs**
-  and bakes it into the signed `.cmdline` section (`composefs.digest=v1-sha512-12:…`
-  plus the legacy `composefs=…` fallback). Our `kargs.d` entries, including
-  `systemd.volatile=yes`, are baked in too — no `--karg` is allowed at install
-  time because that would be unsigned.
+- The kernel and initramfs come from `kernel/initramfs.bst` and are embedded in
+  the UKI. They are not moved out of the tree being hashed.
+- `bootc container ukify` computes the **composefs digest of the final rootfs**
+  (`oci/rootfs.bst`, including the signed systemd-boot loader) and bakes it into
+  the signed `.cmdline` section (`composefs.digest=v1-sha512-12:…` plus the
+  legacy `composefs=…` fallback). Our `kargs.d` entries, including
+  `systemd.volatile=yes` and `console=ttyS0`, are baked in too — no `--karg` is
+  allowed at install time because that would be unsigned.
 - The UKI is signed with `systemd-sbsign` (reproducible: uses `SOURCE_DATE_EPOCH`)
-  and verified with `sbverify`. systemd-boot is signed as
-  `systemd-boot*.efi.signed`, which `bootctl install` prefers.
+  and verified with `sbverify`. systemd-boot is signed in the signing-only
+  `uki/systemd-boot.bst` element, so it is already part of the hashed rootfs.
 - `bootc install to-disk --composefs-backend --bootloader systemd` detects the
-  UKI at `/boot/EFI/Linux/`, validates its embedded digest against the image,
-  and installs it to the ESP. The digest, not a mutable path, is the root of trust.
+  UKI at `/boot/EFI/Linux/`, regenerates the composefs digest from the final OCI
+  rootfs, and refuses to install unless the two agree. The digest, not a mutable
+  path, is the root of trust. `testsuite/boot/test-boot.sh` runs this install and
+  a subsequent OVMF boot on every pull request.
 - Keys are never committed. `files/boot-keys/` is gitignored; CI writes the real
   DB/PK/KEK keys from secrets before release builds. Dev builds generate
   throwaway keys at build time via `scripts/gen-dev-keys.sh` (or on demand in the
   `uki/boot-keys.bst` element). Signing elements are never in a runtime stack,
   because their BST artifacts contain key material.
+
+### Debug UKI
+
+A second UKI is built from the same rootfs and therefore pins the same verified
+root. It is signed by a **distinct DEBUG key pair** that is generated in
+`uki/boot-keys.bst` and never enrolled in firmware, has its own filename
+(`mjolnir-debug-<kver>.efi`) and a `Mjolnir (debug)` title, and is staged under
+`/boot/mjolnir-debug`. It is not an enabled layer or a bootc-managed deployment:
+bootc rejects a second composefs cmdline under `/boot/EFI/Linux` and names all
+of the UKIs it installs after the deployment digest. Provisioning copies the
+debug binary and its `mjolnir-debug.conf` onto the ESP only when a debug entry
+is wanted; the default image always boots the DB/VENDOR-signed UKI.
+
+The `mjolnir.boot-report` systemd credential is opt-in and prints `bootc status`
+JSON on the serial console. CI uses it to assert bootc status and image
+provenance without a shell in the image.
 
 On real hardware you must enroll the DB key in firmware (setup mode via
 `loader/keys/auto/`, or shim/MOK). The image alone cannot enroll keys for you —
@@ -69,8 +88,10 @@ that is deliberately an out-of-band, physically local step.
 
 - SHA-256 PCR values from `/sys/class/tpm/tpm0/pcr-sha256/*` when a TPM is present
 - SHA-256 hash of the binary TCG event log
-- SHA-256 hash of the booted signed UKI discovered on the ESP
-  (`EFI/Linux/bootc/bootc_composefs-*.efi`)
+- SHA-256 hashes of every signed UKI discovered on the ESP, with the default
+  bootc-managed entry (`EFI/Linux/bootc/bootc_composefs-*.efi`) preferred for
+  the flat `uki.peHashSha256` field. The `uki.candidates` array also reports the
+  opt-in debug entry, so attestation never assumes a single `.efi` on the ESP.
 - the pinned composefs digest parsed from `/proc/cmdline`
   (`composefs.digest=v1-sha512-12:…`, with a `composefs=` fallback) — this is a
   SHA-512 digest, not a dm-verity root hash; the legacy field name is kept for

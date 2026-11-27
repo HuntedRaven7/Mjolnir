@@ -23,10 +23,16 @@ config:
     # volatile /etc at boot. Only mapping options are stored; no keys.
     install -Dm644 /config/crypttab "${root}/etc/crypttab"
     install -Dm644 /config/crypttab "${root}/usr/share/factory/etc/crypttab"
-    install -Dm644 /config/bootc/kargs.d/50-volatile.toml \
-      "${root}/usr/lib/bootc/kargs.d/50-volatile.toml"
-    install -Dm644 /config/bootc/kargs.d/60-journal-console.toml \
-      "${root}/usr/lib/bootc/kargs.d/60-journal-console.toml"
+    # Every signed cmdline source is explicit so a new kargs.d file cannot be
+    # silently omitted: volatile root, boot-test status, diagnostics console.
+    mkdir -p "${root}/usr/lib/bootc/kargs.d"
+    install -m644 \
+      /config/bootc/kargs.d/40-console.toml \
+      /config/bootc/kargs.d/50-volatile.toml \
+      /config/bootc/kargs.d/60-journal-console.toml \
+      "${root}/usr/lib/bootc/kargs.d/"
+    install -Dm644 /config/repart.d/10-mjolnir-esp.conf \
+      "${root}/usr/lib/repart.d/10-mjolnir-esp.conf"
     install -Dm644 /config/repart.d/20-mjolnir-state.conf \
       "${root}/usr/lib/repart.d/20-mjolnir-state.conf"
     install -Dm644 /config/journald/10-persistent.conf \

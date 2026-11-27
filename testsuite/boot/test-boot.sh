@@ -16,7 +16,7 @@ fail() {
   echo "::error::$*" >&2
   if [ -s "${SERIAL:-}" ]; then
     echo "--- serial console tail at failure ---" >&2
-    tail -60 "$SERIAL" >&2
+    tail -80 "$SERIAL" >&2
   fi
   exit 1
 }
@@ -57,7 +57,14 @@ truncate -s 32G "$WORK/disk.raw"
 # The disk is attached on the host with partition scanning (-P), so the whole
 # device and its partition nodes are complete. DPS stays on and no device path
 # is hardcoded here.
-# No --karg: the signed UKI carries its whole command line.
+# --run-repart makes bootc plan the disk from the image's repart.d definitions.
+# With --generic-image it creates root/ESP/BIOS at install and leaves the space
+# systemd-repart needs for MjolnirState on first boot. Without it bootc uses
+# sfdisk only: it grows root over the whole disk, the encrypted state partition
+# never appears, and systemd-cryptsetup@mjolnir-state waits on its device unit
+# without a timeout until the boot test gives up.
+# No --karg: a sealed UKI carries its whole cmdline in the signed .cmdline
+# section, and bootc refuses install-time kargs.
 LOOP=$(sudo losetup -f --show -P "$WORK/disk.raw")
 set +e
 sudo podman run --rm --privileged --pid=host --ipc=host \
@@ -65,7 +72,7 @@ sudo podman run --rm --privileged --pid=host --ipc=host \
   -v /var/lib/containers:/var/lib/containers \
   "$IMAGE" \
   bootc install to-disk --composefs-backend --generic-image "$LOOP" \
-    --filesystem btrfs --wipe --bootloader systemd
+    --filesystem btrfs --wipe --bootloader systemd --run-repart
 INSTALL_RC=$?
 set -e
 if [ "$INSTALL_RC" -ne 0 ]; then
@@ -92,6 +99,26 @@ echo "$CMD" | grep -q 'systemd.volatile=yes' || fail "missing volatile karg: $CM
 DIGEST=$(printf '%s\n' "$CMD" | sed -n 's/.*composefs.digest=v1-sha512-12:\([0-9a-f]*\).*/\1/p')
 [ "$DIGEST" = "$EXPECTED" ] || fail "installed UKI digest $DIGEST != image digest $EXPECTED"
 pass "installed UKI pins the digest of the image under test"
+
+echo "==> registering the separately signed debug UKI as a second boot entry"
+# The digest computation above uses a short-lived `podman run --rm`, so create
+# a named source container here for the read-only copy of the debug assets.
+sudo podman create --name mjolnir-boot-src "$IMAGE" >/dev/null || \
+  fail "cannot create source container for the debug UKI"
+sudo podman cp mjolnir-boot-src:/boot/mjolnir-debug "$WORK/"
+DBG_EFI=$(sudo find "$WORK/mjolnir-debug" -name '*.efi' -type f | head -1)
+[ -n "$DBG_EFI" ] || fail "debug UKI is missing from the image"
+sudo install -Dm644 "$DBG_EFI" "$WORK/esp/EFI/Linux/$(basename "$DBG_EFI")"
+sudo install -Dm644 "$WORK/mjolnir-debug/mjolnir-debug.conf" \
+  "$WORK/esp/loader/entries/99-mjolnir-debug.conf"
+sudo objcopy -O binary -j .cmdline \
+  "$WORK/esp/EFI/Linux/$(basename "$DBG_EFI")" "$WORK/debug-cmdline.bin"
+DBG_CMD=$(tr -d '\000' < "$WORK/debug-cmdline.bin")
+echo "$DBG_CMD" | grep -q 'composefs.digest=v1-sha512-12:' || fail "debug UKI has no digest"
+printf '%s\n' "$DBG_CMD" | grep -q "$EXPECTED" || fail "debug UKI pins a different root"
+[ "$(basename "$DBG_EFI")" != "$(basename "$UKI")" ] || fail "debug UKI has no distinct EFIname"
+[ "$DBG_EFI" != "$UKI" ] || fail "debug UKI is not a distinct binary"
+pass "debug UKI is a distinct entry pinning the same verified root"
 
 echo "==> booting the installed disk with OVMF"
 sudo umount "$WORK/esp" || fail "could not unmount the ESP at $WORK/esp"
@@ -134,6 +161,7 @@ timeout 300 sudo qemu-system-x86_64 \
   -drive if=pflash,format=raw,unit=0,file="$WORK/code.fd",readonly=on \
   -drive if=pflash,format=raw,unit=1,file="$WORK/vars.fd" \
   -drive file="$WORK/disk.raw",format=raw,media=disk \
+  -smbios type=11,value=io.systemd.credential:mjolnir.boot-report=1 \
   -smbios "type=11,value=io.systemd.credential.binary:varlink-httpd.tls.trust=$CA_B64" \
   -netdev user,id=net0,hostfwd=tcp::11031-:1031 \
   -device virtio-net-pci,netdev=net0 \
@@ -150,6 +178,10 @@ for _ in $(seq 1 140); do
   kill -0 "$QEMU_PID" 2>/dev/null || break
   sleep 2
 done
+# The readiness loop returns as soon as Varlink accepts; give the guest a
+# moment to flush startup and boot-report lines to the serial file before
+# shutting it down, since the assertions below read that file.
+sleep 3
 kill "$QEMU_PID" 2>/dev/null || true
 QEMU_RC=0
 wait "$QEMU_PID" 2>/dev/null || QEMU_RC=$?
@@ -180,6 +212,11 @@ if grep -qE '\[ *FAILED *\]|Failed to start' "$SERIAL"; then
   grep -E '\[ *FAILED *\]|Failed to start' "$SERIAL" >&2
   fail "failed systemd units at boot"
 fi
+# Startup completion and the boot-report credential name cannot be asserted
+# from this serial file: journald console output is not guaranteed in the
+# guest, while the live Varlink socket proves systemd reached user space. The
+# dotted credential name is checked statically in tests/test_units.py and the
+# unit is required in tests/test_boot_assets.py.
 # bootc-root-setup.service is Required by initrd-root-fs.target. A failure
 # there prevents switch-root, so a live Varlink socket also proves it ran.
 pass "booted with OVMF: signed UKI cmdline, live user space, no failed units"

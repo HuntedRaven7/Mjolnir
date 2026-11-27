@@ -94,9 +94,16 @@ json_object *mjolnir_attestation(void) {
     }
 
     // UKI PE hash and verity root hash from the booted system.
+    // An image may carry more than one signed UKI: bootc installs the default
+    // one under EFI/Linux/bootc, while the opt-in debug UKI is a separate
+    // systemd-boot entry. Report every candidate and select the default UKI
+    // for the flat fields, so consumers keep working without assuming there
+    // is exactly one .efi on the ESP.
     json_object *uki = json_object_new_object();
-    // bootc installs the UKI to EFI/Linux/bootc/bootc_composefs-<verity>.efi
-    // with a content-derived name; discover the single .efi on the ESP.
+    json_object *candidates = json_object_new_array();
+    char *preferred_path = NULL;
+    char *preferred_hash = NULL;
+    int preferred_is_debug = 0;
     const char *dirs[] = {
         "/efi/EFI/Linux/bootc", "/boot/EFI/Linux/bootc",
         "/boot/efi/EFI/Linux/bootc", "/efi/EFI/Linux",
@@ -108,21 +115,39 @@ json_object *mjolnir_attestation(void) {
         struct dirent *e;
         while ((e = readdir(dir))) {
             size_t n = strlen(e->d_name);
-            if (n > 4 && !strcmp(e->d_name + n - 4, ".efi")) {
-                char path[512];
-                snprintf(path, sizeof(path), "%s/%s", dirs[d], e->d_name);
-                char *h = sha256_file(path);
-                if (h) {
-                    json_object_object_add(uki, "peHashSha256", json_object_new_string(h));
-                    json_object_object_add(uki, "path", json_object_new_string(path));
-                    free(h);
-                    closedir(dir);
-                    break;
-                }
+            if (n <= 4 || strcmp(e->d_name + n - 4, ".efi")) continue;
+            // Addons and the signed loader are not boot entries.
+            if (strstr(e->d_name, ".addon.efi") || !strncmp(e->d_name, "systemd-boot", 12))
+                continue;
+            char path[512];
+            snprintf(path, sizeof(path), "%s/%s", dirs[d], e->d_name);
+            char *h = sha256_file(path);
+            if (!h) continue;
+            int is_debug = strstr(e->d_name, "debug") != NULL;
+            json_object *c = json_object_new_object();
+            json_object_object_add(c, "path", json_object_new_string(path));
+            json_object_object_add(c, "peHashSha256", json_object_new_string(h));
+            json_object_object_add(c, "debug", json_object_new_boolean(is_debug));
+            json_object_array_add(candidates, c);
+            if (!preferred_hash || (preferred_is_debug && !is_debug)) {
+                free(preferred_hash);
+                preferred_hash = h;
+                preferred_path = strdup(path);
+                preferred_is_debug = is_debug;
+            } else {
+                free(h);
             }
         }
-        if (json_object_object_get(uki, "peHashSha256")) { closedir(dir); break; }
         closedir(dir);
+    }
+    json_object_object_add(uki, "candidates", candidates);
+    json_object_object_add(uki, "candidateCount",
+                           json_object_new_int(json_object_array_length(candidates)));
+    if (preferred_hash) {
+        json_object_object_add(uki, "peHashSha256", json_object_new_string(preferred_hash));
+        json_object_object_add(uki, "path", json_object_new_string(preferred_path));
+        free(preferred_hash);
+        free(preferred_path);
     }
     json_object_object_add(root, "uki", uki);
 

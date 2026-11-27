@@ -9,3 +9,4 @@ enable mjolnir-state-enroll.service
 enable mjolnir-etcd-snapshot.timer
 enable NetworkManager.service
 enable systemd-resolved.service
+enable mjolnir-boot-report.service

@@ -1,0 +1,4 @@
+# 60-journal-console.toml supplies console=ttyS0,115200 and console log
+# forwarding. This adds the status lines the CI boot test reads from the
+# serial console. Baked into the signed UKI cmdline, never passed at install.
+kargs = ["systemd.show_status=yes"]

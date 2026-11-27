@@ -23,6 +23,7 @@ config:
   - |
     set -eu
 
+
     # --- build the OCI layout -----------------------------------------------
     # /uki/rootfs is the tree the signed UKI pinned, including its /boot/EFI/
     # Linux UKI and its signed systemd-boot. Do not copy anything into it.

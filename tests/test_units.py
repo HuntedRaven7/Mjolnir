@@ -55,6 +55,14 @@ def main() -> int:
             if "image:" in line and "@sha256:" not in line:
                 errors.append(f"{manifest.relative_to(ROOT)}:{lineno}: unpinned image")
 
+    # The opt-in boot-report unit is gated on a system credential with a
+    # dotted name. A rename silently disables the diagnostic, so check the
+    # static contract here instead of relying on console text in the VM.
+    report = ROOT / "files/config/systemd/mjolnir-boot-report.service"
+    report_text = report.read_text() if report.is_file() else ""
+    if "/run/credentials/@system/mjolnir.boot-report" not in report_text:
+        errors.append("mjolnir-boot-report.service: missing dotted boot-report credential gate")
+
     # Lid switches must never suspend an unattended node.
     logind = ROOT / "files/config/logind/50-ignore-lid.conf"
     logind_text = logind.read_text() if logind.is_file() else ""

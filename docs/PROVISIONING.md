@@ -72,10 +72,18 @@ to provisioning tooling outside the image.
 | `wifi-ssid` | wifi | WiFi network name (station mode) |
 | `wifi-psk` | wifi | 64-character hex WPA2/WPA3 PSK |
 | `varlink-httpd.tls.trust` | varlink-httpd | PEM CA used to verify mTLS clients |
-| `journal.forward_to_socket` | provisioning only | optional value written for external tooling; no image consumer, no journald effect |
+| `journal.forward_to_socket` | journald | optional socket address for off-node journal export |
+| `mjolnir.boot-report` | boot report | opt-in: print `bootc status` JSON on the serial console |
 | `registry-user`, `registry-token` | provisioning | optional GHCR credentials for the image pull |
 | `etcd-snapshot-url`, `etcd-snapshot-token` | etcd snapshot | HTTPS destination and bearer token for off-node snapshots |
 | `reset-confirm`, `reset-lone-cp` | reset services | TPM2-sealed confirmations, created off-node as `.cred` files |
+
+The opt-in debug UKI lives at `/boot/mjolnir-debug/` in the image. To add it as
+a second systemd-boot entry, copy `mjolnir-debug-<kver>.efi` to `/EFI/Linux/`
+on the ESP and `mjolnir-debug.conf` to `/loader/entries/`. It is signed with a
+DEBUG key that is not enrolled in firmware, so it is only usable with Secure
+Boot disabled or with that key explicitly enrolled. It pins the same composefs
+root as the default UKI.
 
 `wifi-*` credentials are optional; without them the node uses wired networking
 only. `join-*` credentials are required on workers and ignored on the control

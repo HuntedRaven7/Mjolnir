@@ -30,6 +30,43 @@ def check() -> list[str]:
     if not re.search(r"^FactoryReset=yes\s*$", repart, re.MULTILINE):
         errors.append("repart.d: state partition is not factory-resettable")
 
+    # repart.d accepts DPS identifiers or a GPT UUID, not arbitrary names.
+    # `Type=state` parses nowhere and made bootc install fail in CI.
+    valid_types = {
+        "esp", "xbootldr", "swap", "home", "srv", "var", "tmp", "linux-generic",
+        "root", "root-verity", "root-verity-sig", "root-secondary",
+        "root-secondary-verity", "root-secondary-verity-sig",
+        "usr", "usr-verity", "usr-verity-sig", "usr-secondary",
+        "usr-secondary-verity", "usr-secondary-verity-sig",
+    }
+    arch = (r"alpha|arc|arm|arm64|ia64|loongarch64|mips-le|mips64-le|parisc|"
+            r"ppc|ppc64|ppc64-le|riscv32|riscv64|s390|s390x|tilegx|x86|x86-64")
+    arch_type = re.compile(rf"^(?:root|usr)(?:-(?:{arch}))?(?:-verity(?:-sig)?)?$")
+    uuid_type = re.compile(
+        r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+        r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    )
+    for value in re.findall(r"^Type=(\S+)\s*$", repart, re.MULTILINE):
+        if value not in valid_types and not arch_type.match(value) and not uuid_type.match(value):
+            errors.append(f"repart.d: invalid Type={value} (not a DPS identifier or GPT UUID)")
+    if not re.search(r"^Type=linux-generic\s*$", repart, re.MULTILINE):
+        errors.append("repart.d: encrypted state must use linux-generic so only the explicit mount binds it")
+
+    # With --run-repart bootc generates only root. The image must ship an ESP
+    # definition or bootloader installation fails with "ESP partition not found".
+    esp_defs = [
+        path for path in (ROOT / "files/config/repart.d").glob("*.conf")
+        if re.search(r"^Type=esp\s*$", path.read_text(), re.MULTILINE)
+    ]
+    if not esp_defs:
+        errors.append("repart.d: missing Type=esp definition for --run-repart installs")
+    else:
+        esp_text = "\n".join(path.read_text() for path in esp_defs)
+        if not re.search(r"^Format=vfat\s*$", esp_text, re.MULTILINE):
+            errors.append("repart.d: ESP definition must format vfat")
+        if not re.search(r"^SizeMinBytes=\d+G\s*$", esp_text, re.MULTILINE):
+            errors.append("repart.d: ESP definition has no minimum size")
+
     crypttab = text("files/config/crypttab")
     if not re.search(
         r"^mjolnir-state\s+/dev/disk/by-partlabel/MjolnirState\s+-\s+"
@@ -91,8 +128,18 @@ def check() -> list[str]:
     for element in ROOT.glob("elements/**/*.bst"):
         if element.name == "boot-keys.bst" or element.name == "mjolnir-uki.bst":
             continue
-        if "uki/boot-keys.bst" in element.read_text():
-            errors.append(f"{element.name}: signing-only key element in runtime stack")
+        body = element.read_text()
+        if "uki/boot-keys.bst" not in body:
+            continue
+        # A signing-only element may consume the keys to sign a public binary.
+        # What must never reach a runtime stack is the key material itself, so
+        # flag any element that stages a staged key into its own artifact.
+        for line in body.splitlines():
+            if "/boot-keys/" not in line or not re.search(r"\.(key|pem)\b", line):
+                continue
+            if "%{install-root}" in line or re.search(r"\$\{?root\}?/", line):
+                errors.append(f"{element.name}: private key staged into runtime artifact")
+                break
 
     # Only public PCR material may be committed. Scan tracked files only:
     # BuildStream stages upstream test keys into the gitignored .bst cache,

@@ -26,6 +26,7 @@ just lint         # bootc container lint
 just test         # static config checks + image content assertions
 just disk         # bootc install to-disk into build/bootable.raw
 just vm           # boot that disk in QEMU with a serial console
+just boot-test    # full install + OVMF boot proof (root, KVM, OVMF required)
 ```
 
 `just build` runs the build and export steps together.

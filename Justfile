@@ -81,6 +81,7 @@ test:
     python3 tests/test_member_id.py
     python3 tests/test_diagnostics.py
     python3 tests/test_state_reset.py
+    python3 tests/test_bootc_patch.py
     python3 tests/test_attestation_verifier.py
     python3 tests/test_fleet_varlink.py
     python3 tests/test_initramfs_policy.py
@@ -106,6 +107,8 @@ disk size="32G":
       "{{image_name}}:{{image_tag}}" \
       bootc install to-disk --composefs-backend --via-loopback /data/build/bootable.raw \
         --filesystem btrfs --wipe --bootloader systemd
+    # No --karg: a sealed UKI carries its whole cmdline in the signed
+    # .cmdline section, and bootc rejects install-time kargs for immutable boot.
 
 # Full install + OVMF boot proof. Requires root, KVM, QEMU and OVMF.
 boot-test:

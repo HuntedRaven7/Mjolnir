@@ -8,6 +8,10 @@ description: |
 
 build-depends:
 - base/sandbox-tools.bst
+# bootc brings the 51bootc and 50ostree dracut modules, initramfs-setup and
+# ostree-prepare-root. Without them dracut never prepares the composefs
+# deployment at /sysroot, so systemd-volatile-root finds no /sysroot/usr.
+- mgmt/bootc.bst
 - freedesktop-sdk.bst:components/fakecap.bst
 - freedesktop-sdk.bst:components/dracut.bst
 - freedesktop-sdk.bst:components/cryptsetup.bst
@@ -62,6 +66,32 @@ config:
     install -Dm644 /config/crypttab /etc/crypttab
     install -Dm644 /config/dracut/50-mjolnir-tpm2.conf \
       /etc/dracut.conf.d/50-mjolnir-tpm2.conf
+    # FSDK installs shared libraries in the multiarch libdir but ships an empty
+    # /etc/ld.so.conf. dracut-install resolves DT_NEEDED from that file plus
+    # /lib and /usr/lib, so with an empty config the initramfs contains no libc
+    # and /init panics with "error while loading shared libraries".
+    LIBDIR=""
+    for candidate in /usr/lib/x86_64-linux-gnu/libc.so.6 \
+                     /usr/lib/*/libc.so.6 /usr/lib/libc.so.6; do
+      if [ -f "$candidate" ]; then LIBDIR=$(dirname "$candidate"); break; fi
+    done
+    test -n "$LIBDIR" || { echo "no libc.so.6 in the initramfs sandbox" >&2; exit 1; }
+    {
+      echo /lib
+      echo /usr/lib
+      echo "$LIBDIR"
+    } > /etc/ld.so.conf
+    echo "dracut library path: $LIBDIR"
+    # bootc-root-setup mounts the composefs deployment onto /sysroot. Both it
+    # and systemd-volatile-root are unordered members of initrd-root-fs.target,
+    # but volatile-root resolves /sysroot/usr and fails in emergency mode if it
+    # wins that race. Order it after the root setup that makes /usr exist.
+    install -d /usr/lib/systemd/system/systemd-volatile-root.service.d
+    cat > /usr/lib/systemd/system/systemd-volatile-root.service.d/10-after-bootc.conf <<'EOF'
+    [Unit]
+    After=bootc-root-setup.service
+    Requires=bootc-root-setup.service
+    EOF
     # dracut requires modules.dep in the sandbox root /usr/lib/modules.
     depmod -a "${version}"
     mkdir -p "%{install-root}/usr/lib/modules"
@@ -82,11 +112,26 @@ config:
            --kver "${version}" \
            --kernel-image "/usr/lib/modules/${version}/vmlinuz" \
            --add bootc \
+           --install /usr/lib/systemd/system/systemd-volatile-root.service.d/10-after-bootc.conf \
            --fstab --verbose -f /initramfs.raw > /tmp/dracut.log 2>&1; then
       tail -80 /tmp/dracut.log >&2
       exit 1
     fi
     /initramfs-tools/sanitize-initramfs.sh /initramfs.raw /initramfs.img
+    # Prove /init can load before the image is sealed into a UKI.
+    for lib in libc.so.6 libgcc_s.so.1; do
+      lsinitrd /initramfs.img | grep -q "/$lib" || {
+        echo "initramfs is missing $lib" >&2
+        exit 1
+      }
+    done
+    # Prove the composefs root setup is sealed into the initramfs.
+    for f in bootc-root-setup.service initramfs-setup 10-after-bootc.conf; do
+      lsinitrd /initramfs.img | grep -q "$f" || {
+        echo "initramfs is missing $f" >&2
+        exit 1
+      }
+    done
     install -Dm644 /initramfs.img \
       "%{install-root}/usr/lib/modules/${version}/initramfs.img"
     depmod -b "%{install-root}/usr" -a "${version}"

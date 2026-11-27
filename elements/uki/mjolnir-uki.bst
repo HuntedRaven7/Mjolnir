@@ -34,10 +34,8 @@ config:
     set -eu
     # The BST sandbox root is FUSE and cannot read xattrs (listxattr returns
     # ENOTSUP), which bootc's composefs scanner requires. Copy the rootfs onto
-    # /tmp (tmpfs) where xattrs work. The composefs transform only keeps
-    # security.capability, so tmpfs's lack of persistent security.* xattrs is
-    # harmless. /var/tmp is needed by bootc for its temp repo; our patched
-    # bootc honours TMPDIR, which we point at the writable /tmp.
+    # /tmp (tmpfs) where xattrs work. /var/tmp is needed by bootc for its temp
+    # repo; our patched bootc honours TMPDIR, which we point at the writable /tmp.
     export TMPDIR=/tmp
     WORK=/tmp/mjolnir-uki
     ROOTFS="$WORK/rootfs"
@@ -72,9 +70,10 @@ config:
     test -f "$KDIR/vmlinuz"
     test -f "$KDIR/initramfs.img"
 
-    # bootc computes the composefs digest of the exact rootfs and generates the
-    # `.cmdline` (v1 digest + v2 fallback + kargs.d entries such as
-    # systemd.volatile=yes). No --karg may be passed at install time.
+    # bootc computes the composefs digest of the exact final rootfs and
+    # generates the `.cmdline` (V1 digest + V2 fallback + kargs.d entries such
+    # as systemd.volatile=yes and console=ttyS0). No --karg may be passed at
+    # install time, because that would bypass the signature.
     bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
       -- --output "$WORK/mjolnir.efi" \
       --uname "${kver}" \
@@ -94,6 +93,39 @@ config:
     objcopy -O binary -j .pcrpkey "$WORK/mjolnir.efi" "$WORK/pcrpkey.pem"
     cmp "$WORK/pcrpkey.pem" "${WORK}/keys/PCR.pub"
     grep -q '"sig"' "$WORK/pcrsig.json"
+
+    # The debug UKI pins the same verified root but is signed with a DEBUG key
+    # that is never enrolled in firmware. Its distinct os-release gives it its
+    # own systemd-boot title. It is staged under /boot for opt-in registration,
+    # not installed as a second bootc-managed UKI: bootc rejects two composefs
+    # cmdlines under EFI/Linux.
+    cat > "$WORK/debug-os-release" <<EOF
+    ID=mjolnir
+    ID_LIKE=fedoraproject
+    NAME="Mjolnir"
+    PRETTY_NAME="Mjolnir (debug)"
+    VERSION_ID="0"
+    VARIANT_ID=debug
+    EOF
+    bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
+      -- --output "$WORK/mjolnir-debug.efi" \
+      --uname "${kver}-debug" \
+      --os-release=@"$WORK/debug-os-release" \
+      --signtool=systemd-sbsign --no-sign-kernel \
+      --secureboot-private-key="${WORK}/keys/DEBUG.key" \
+      --secureboot-certificate="${WORK}/keys/DEBUG.crt" \
+      --pcr-private-key="${WORK}/keys/PCR.key" \
+      --pcr-public-key="${WORK}/keys/PCR.pub" \
+      --pcr-banks=sha256
+    sbverify --cert "${WORK}/keys/DEBUG.crt" "$WORK/mjolnir-debug.efi"
+    objcopy -O binary -j .cmdline "$WORK/mjolnir-debug.efi" "$WORK/debug-cmdline.txt"
+    grep -q 'composefs.digest=v1-sha512-12:' "$WORK/debug-cmdline.txt"
+    grep -q "$(cat "%{install-root}/usr/share/mjolnir/composefs-digest.txt")" \
+      "$WORK/debug-cmdline.txt"
+    if cmp -s "$WORK/mjolnir.efi" "$WORK/mjolnir-debug.efi"; then
+      echo "debug UKI is byte-identical to the default UKI" >&2
+      exit 1
+    fi
 
     # The pinned composefs digest, as a build record. It is deliberately kept
     # out of the image: a file containing its own tree's digest cannot be part
@@ -123,6 +155,16 @@ config:
     # here does not invalidate the digest computed above.
     install -Dm644 "$WORK/mjolnir.efi" \
       "${ROOTFS}/boot/EFI/Linux/mjolnir-${kver}.efi"
+    # Publish the pinned digest under /boot for attestation. composefs empties
+    # /boot before hashing, so this cannot make the pin self-referential.
+    install -Dm644 "%{install-root}/usr/share/mjolnir/composefs-digest.txt" \
+      "${ROOTFS}/boot/mjolnir-composefs-digest.txt"
+    install -Dm644 "$WORK/mjolnir-debug.efi" \
+      "${ROOTFS}/boot/mjolnir-debug/mjolnir-debug-${kver}.efi"
+    cat > "${ROOTFS}/boot/mjolnir-debug/mjolnir-debug.conf" <<EOF
+    title Mjolnir (debug)
+    efi /EFI/Linux/mjolnir-debug-${kver}.efi
+    EOF
 
     # The OCI layer is this exact tree. oci/mjolnir.bst must not mutate it.
     cp -a "${ROOTFS}/." "%{install-root}/rootfs/"
