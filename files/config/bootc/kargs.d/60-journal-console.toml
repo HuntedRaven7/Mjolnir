@@ -1,5 +1,7 @@
 kargs = [
   "console=ttyS0,115200",
   "systemd.journald.forward_to_console=1",
-  "systemd.journald.max_level_console=warning",
+  # The CI boot test reads startup and boot-report lines from the serial
+  # console; warning-only forwarding hides those info-level messages.
+  "systemd.journald.max_level_console=info",
 ]

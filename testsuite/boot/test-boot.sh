@@ -178,6 +178,10 @@ for _ in $(seq 1 140); do
   kill -0 "$QEMU_PID" 2>/dev/null || break
   sleep 2
 done
+# The readiness loop returns as soon as Varlink accepts; give the guest a
+# moment to flush startup and boot-report lines to the serial file before
+# shutting it down, since the assertions below read that file.
+sleep 3
 kill "$QEMU_PID" 2>/dev/null || true
 QEMU_RC=0
 wait "$QEMU_PID" 2>/dev/null || QEMU_RC=$?
