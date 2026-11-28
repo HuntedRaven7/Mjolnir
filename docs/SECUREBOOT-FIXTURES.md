@@ -33,8 +33,9 @@ runtime image or these assets.
 
 ## Regeneration
 
-Fixtures are generated on a successful `build` workflow run on `testing`, or by
-manual dispatch of that workflow, and uploaded by the `publish-fixtures` job.
+Fixtures are generated on every successful `build` workflow run, including pull
+requests, so the image gate exercises the generator. The `publish-fixtures` job
+replaces the release assets only on a `testing` push or manual dispatch.
 To regenerate locally after a completed image build:
 
 ```sh

@@ -53,6 +53,10 @@ def main() -> int:
         errors.append("fixtures would be published from a pull request run")
     if "contents: write" not in publish_block:
         errors.append("publish job cannot write the release")
+    generate_block = workflow.split("      - name: Generate Secure Boot fixtures", 1)[1]
+    generate_block = generate_block.split("      - name: Upload Secure Boot fixtures", 1)[0]
+    if "if:" in generate_block:
+        errors.append("fixture generation must run on PRs so the image gate exercises it")
 
     docs = read("docs/SECUREBOOT-FIXTURES.md")
     if BASE_URL not in docs or not all(f in docs for f in ASSETS):
