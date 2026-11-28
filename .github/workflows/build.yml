@@ -180,6 +180,7 @@ jobs:
           path: |
             ${{ runner.temp }}/mjolnir-boot-test/secureboot-signed.log
             ${{ runner.temp }}/mjolnir-boot-test/secureboot-unknown.log
+            ${{ runner.temp }}/mjolnir-boot-test/secureboot-*/enroll.log
           if-no-files-found: warn
           retention-days: 90
 

@@ -48,8 +48,8 @@ enabled by the preset. A drop-in for `systemd-cryptsetup@mjolnir-state.service`
 wires `OnFailure=` to `mjolnir-state-unseal-failed.service`; that unit and the
 drop-in are installed in both the rootfs and the initramfs because the PCR miss
 fails cryptsetup before switch-root. Both units use
-`StandardOutput=journal+console` so the strings reach the serial log
-regardless of journald forwarding settings.
+`StandardOutput=console` so the strings reach `/dev/console` directly; journald
+forwarding is not reliable during early boot in the VM.
 
 ### Fixtures
 

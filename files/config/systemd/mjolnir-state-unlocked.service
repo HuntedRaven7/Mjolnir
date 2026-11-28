@@ -7,11 +7,11 @@ RequiresMountsFor=/var/lib/mjolnir
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# journal+console writes straight to /dev/console; the needle is not subject to
-# journald forwarding settings or console log level.
+# console writes straight to /dev/console. Journal forwarding is not reliable
+# during early boot in the VM, so the needle must bypass journald entirely.
 ExecStart=/usr/bin/echo MjolnirState: unlocked
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=console
+StandardError=console
 
 [Install]
 WantedBy=local-fs.target

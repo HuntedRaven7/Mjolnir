@@ -83,12 +83,12 @@ def main() -> int:
 
     require(unlocked, "ExecStart=/usr/bin/echo MjolnirState: unlocked", "unlock needle")
     require(unlocked, "After=var-lib-mjolnir.mount", "unlock ordering")
-    require(unlocked, "StandardOutput=journal+console", "console output")
+    require(unlocked, "StandardOutput=console", "console output")
     require("files/config/presets/80-mjolnir.preset",
             "enable mjolnir-state-unlocked.service", "unlock preset")
     require(failed, "ExecStart=/usr/bin/echo PCR policy", "PCR needle")
     require(failed, "ExecStart=/usr/bin/echo Failed to unseal", "unseal failure needle")
-    require(failed, "StandardOutput=journal+console", "console output")
+    require(failed, "StandardOutput=console", "console output")
     require(dropin, "OnFailure=mjolnir-state-unseal-failed.service", "failure wiring")
     require(dracut, "mjolnir-state-unseal-failed.service", "initramfs failure unit")
     require(dracut, "10-mjolnir-failure.conf", "initramfs drop-in")
