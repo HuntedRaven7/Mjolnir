@@ -8,6 +8,8 @@
 - Network access to `gitlab.com`, `github.com`, `dl.k8s.io`, the FSDK BuildStream
   caches and the pinned FSDK `bst2` container image.
 - QEMU with KVM for the boot test (optional; requires a real root user namespace).
+  The Secure Boot cases in `just boot-test` also need `swtpm` and the release
+  fixtures described in [testsuite/README.md](../testsuite/README.md).
 
 BuildStream itself is not installed on the host. Every `bst` invocation runs
 inside the pinned `bst2` container via `just bst`.

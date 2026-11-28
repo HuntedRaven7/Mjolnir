@@ -63,6 +63,39 @@ def main() -> int:
     if "/run/credentials/@system/mjolnir.boot-report" not in report_text:
         errors.append("mjolnir-boot-report.service: missing dotted boot-report credential gate")
 
+    # Secure Boot serial needles are an external contract: Gram greps for the
+    # exact strings. Check the units, the drop-in that fires on a cryptsetup
+    # failure, and the boot assertions that consume them.
+    def text_at(relative: str) -> str:
+        path = ROOT / relative
+        return path.read_text() if path.is_file() else ""
+
+    def require(relative: str, needle: str, label: str) -> None:
+        if needle not in text_at(relative):
+            errors.append(f"{relative}: missing {label}: {needle!r}")
+
+    unlocked = "files/config/systemd/mjolnir-state-unlocked.service"
+    failed = "files/config/systemd/mjolnir-state-unseal-failed.service"
+    dropin = ("files/config/systemd/systemd-cryptsetup@mjolnir-state.service.d/"
+              "10-mjolnir-failure.conf")
+    dracut = "files/config/dracut/50-mjolnir-tpm2.conf"
+    boot = "testsuite/boot/test-boot.sh"
+
+    require(unlocked, "ExecStart=/usr/bin/echo MjolnirState: unlocked", "unlock needle")
+    require(unlocked, "After=var-lib-mjolnir.mount", "unlock ordering")
+    require(unlocked, "StandardOutput=journal+console", "console output")
+    require("files/config/presets/80-mjolnir.preset",
+            "enable mjolnir-state-unlocked.service", "unlock preset")
+    require(failed, "ExecStart=/usr/bin/echo PCR policy", "PCR needle")
+    require(failed, "ExecStart=/usr/bin/echo Failed to unseal", "unseal failure needle")
+    require(failed, "StandardOutput=journal+console", "console output")
+    require(dropin, "OnFailure=mjolnir-state-unseal-failed.service", "failure wiring")
+    require(dracut, "mjolnir-state-unseal-failed.service", "initramfs failure unit")
+    require(dracut, "10-mjolnir-failure.conf", "initramfs drop-in")
+    require(dracut, "/usr/bin/echo", "initramfs echo binary")
+    for needle in ("MjolnirState: unlocked", "PCR policy", "Failed to unseal"):
+        require(boot, needle, "boot assertion needle")
+
     # Lid switches must never suspend an unattended node.
     logind = ROOT / "files/config/logind/50-ignore-lid.conf"
     logind_text = logind.read_text() if logind.is_file() else ""

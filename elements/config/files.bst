@@ -43,6 +43,10 @@ config:
       "${root}/usr/lib/tmpfiles.d/mjolnir-volatile.conf"
     install -Dm644 /config/systemd/var-lib-mjolnir.mount \
       "${root}/usr/lib/systemd/system/var-lib-mjolnir.mount"
+    # The cryptsetup instance drop-in lives in a directory, so the *.service
+    # glob below does not copy it. The initramfs stages its own copy.
+    install -Dm644 /config/systemd/systemd-cryptsetup@mjolnir-state.service.d/10-mjolnir-failure.conf \
+      "${root}/usr/lib/systemd/system/systemd-cryptsetup@mjolnir-state.service.d/10-mjolnir-failure.conf"
     for m in var-lib-mjolnir var-lib-etcd etc-machine-id \
              etc-NetworkManager-system-connections \
              var-lib-containerd var-lib-kubelet var-log-journal var-lib-cni \

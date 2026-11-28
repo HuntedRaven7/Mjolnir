@@ -1,0 +1,17 @@
+[Unit]
+Description=Report MjolnirState unlock on the serial console
+DefaultDependencies=no
+After=var-lib-mjolnir.mount
+RequiresMountsFor=/var/lib/mjolnir
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# journal+console writes straight to /dev/console; the needle is not subject to
+# journald forwarding settings or console log level.
+ExecStart=/usr/bin/echo MjolnirState: unlocked
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=local-fs.target
