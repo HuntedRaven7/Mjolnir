@@ -65,13 +65,19 @@ Mjolnir builds a **signed, sealed Unified Kernel Image (UKI)** using
 
 A second UKI is built from the same rootfs and therefore pins the same verified
 root. It is signed by a **distinct DEBUG key pair** that is generated in
-`uki/boot-keys.bst` and never enrolled in firmware, has its own filename
-(`mjolnir-debug-<kver>.efi`) and a `Mjolnir (debug)` title, and is staged under
+`uki/boot-keys.bst` and is never enrolled in production firmware. It has its own
+filename (`mjolnir-debug-<kver>.efi`) and a `Mjolnir (debug)` title, and is staged under
 `/boot/mjolnir-debug`. It is not an enabled layer or a bootc-managed deployment:
 bootc rejects a second composefs cmdline under `/boot/EFI/Linux` and names all
 of the UKIs it installs after the deployment digest. Provisioning copies the
 debug binary and its `mjolnir-debug.conf` onto the ESP only when a debug entry
 is wanted; the default image always boots the DB/VENDOR-signed UKI.
+
+For downstream unlock tests, Mjolnir also publishes an OVMF variable store
+enrolling both `VENDOR.crt` and `DEBUG.crt`, the production UKI, and a UKI
+signed by DEBUG with a separate PCR key. Their stable URLs and regeneration
+steps are in [docs/SECUREBOOT-FIXTURES.md](SECUREBOOT-FIXTURES.md). Only public
+key material is published.
 
 The `mjolnir.boot-report` systemd credential is opt-in and prints `bootc status`
 JSON on the serial console. CI uses it to assert bootc status and image

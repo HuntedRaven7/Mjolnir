@@ -18,6 +18,7 @@ def main() -> int:
         "fsdk-ref", "kubernetes-version", "kubelet-amd64-sha256",
         "crictl-version", "containerd-version", "runc-version",
         "cni-plugins-version", "kured-image-digest",
+        "virt-firmware-version", "virt-firmware-wheel-sha256",
     ):
         if key not in versions:
             print(f"missing version key: {key}")

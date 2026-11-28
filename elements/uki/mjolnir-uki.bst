@@ -1,8 +1,9 @@
 kind: manual
 description: |
-  SIGNING-ONLY. Owns the final rootfs tree, builds a signed composefs-digest-
-  pinned UKI for it, and stages both so oci/mjolnir.bst can build the OCI layer
-  from the exact tree whose digest is baked into the signed .cmdline section.
+  SIGNING-ONLY. Owns the final rootfs tree, builds the signed composefs-digest-
+  pinned UKI for it, and stages the tree so oci/mjolnir.bst can build the OCI
+  layer from the exact tree whose digest is baked into the signed .cmdline
+  section. Also stages two public unlock fixtures outside that tree.
   NEVER add this element to a runtime stack (its artifact contains key material
   via boot-keys.bst and a full copy of the rootfs).
 
@@ -142,6 +143,42 @@ config:
     grep -q 'console=ttyS0,115200' "$WORK/cmdline.txt"
     grep -q 'systemd.journald.forward_to_console=1' "$WORK/cmdline.txt"
 
+    # Unlock fixture: a UKI that passes firmware verification with DEBUG.crt
+    # (enrolled in the published test OVMF vars) but carries a PCR signature
+    # from UNKNOWN_PCR.key. The sealed state trusts PCR.key, so this UKI
+    # reaches the initrd and then fails the PCR 11 unseal. It pins the same
+    # composefs digest as the production UKI and is staged outside /rootfs.
+    cat > "$WORK/unknown-os-release" <<EOF
+    ID=mjolnir
+    ID_LIKE=fedoraproject
+    NAME="Mjolnir"
+    PRETTY_NAME="Mjolnir (unknown PCR)"
+    VERSION_ID="0"
+    VARIANT_ID=unknown
+    EOF
+    bootc container ukify --rootfs "$ROOTFS" --kernel-dir "$KDIR" \
+      -- --output "$WORK/mjolnir-unknown.efi" \
+      --uname "${kver}-unknown" \
+      --os-release=@"$WORK/unknown-os-release" \
+      --signtool=systemd-sbsign --no-sign-kernel \
+      --secureboot-private-key="${WORK}/keys/DEBUG.key" \
+      --secureboot-certificate="${WORK}/keys/DEBUG.crt" \
+      --pcr-private-key="${WORK}/keys/UNKNOWN_PCR.key" \
+      --pcr-public-key="${WORK}/keys/UNKNOWN_PCR.pub" \
+      --pcr-banks=sha256
+    sbverify --cert "${WORK}/keys/DEBUG.crt" "$WORK/mjolnir-unknown.efi"
+    objcopy -O binary -j .pcrpkey "$WORK/mjolnir-unknown.efi" \
+      "$WORK/unknown-pcrpkey.pem"
+    cmp "$WORK/unknown-pcrpkey.pem" "${WORK}/keys/UNKNOWN_PCR.pub"
+    if cmp -s "$WORK/unknown-pcrpkey.pem" "$WORK/pcrpkey.pem"; then
+      echo "unknown fixture reuses the production PCR key" >&2
+      exit 1
+    fi
+    objcopy -O binary -j .cmdline "$WORK/mjolnir-unknown.efi" \
+      "$WORK/unknown-cmdline.txt"
+    grep -q "$(cat "%{install-root}/usr/share/mjolnir/composefs-digest.txt")" \
+      "$WORK/unknown-cmdline.txt"
+
     # Publish the public PCR artifacts in this signing-only artifact. They are
     # also embedded in the signed UKI (and exposed to the initrd by systemd-stub),
     # so they are deliberately not copied into the digest-pinned runtime tree.
@@ -165,6 +202,14 @@ config:
     title Mjolnir (debug)
     efi /EFI/Linux/mjolnir-debug-${kver}.efi
     EOF
+
+    # Public unlock fixtures, outside /rootfs so they cannot enter the
+    # digest-pinned tree or the OCI layer. Only the signed binaries and the
+    # enrolled OVMF varstore built from them are published; no key material.
+    install -Dm644 "$WORK/mjolnir.efi" \
+      "%{install-root}/fixtures/uki-signed.efi"
+    install -Dm644 "$WORK/mjolnir-unknown.efi" \
+      "%{install-root}/fixtures/uki-unknown.efi"
 
     # The OCI layer is this exact tree. oci/mjolnir.bst must not mutate it.
     cp -a "${ROOTFS}/." "%{install-root}/rootfs/"
