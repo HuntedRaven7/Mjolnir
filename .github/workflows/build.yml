@@ -273,6 +273,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y -qq python3-cryptography ovmf binutils unzip
+          # Earlier sudo podman steps leave crun's cache under XDG_RUNTIME_DIR
+          # owned by root, which breaks the unprivileged `just bst` below.
+          RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+          sudo chown -R "$(id -u):$(id -g)" "$RUNTIME_DIR/crun" 2>/dev/null || true
           just fixtures
 
       - name: Upload Secure Boot fixtures
