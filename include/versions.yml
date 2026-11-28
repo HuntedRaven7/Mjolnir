@@ -65,6 +65,14 @@ variables:
   buildstream-sbom-ref: "0706fec3bedf6f73bd9d2fed32c2aed585feef8d"
 
   # -------------------------------------------------------------------------
+  # Secure Boot fixture tooling (build-time only, never in the runtime image)
+  # -------------------------------------------------------------------------
+  # virt-fw-vars enrolls the throwaway test keys into OVMF_VARS.enrolled.fd.
+  # scripts/gen-secureboot-fixtures.sh verifies this wheel by sha256 before use.
+  virt-firmware-version: "26.10"
+  virt-firmware-wheel-sha256: "17400a94e9030d02861d00b030fd2f3c2d5b023aa68e955b29b1d58474925391"
+
+  # -------------------------------------------------------------------------
   # Management plane
   # -------------------------------------------------------------------------
   varlink-bridge-commit: "f14cc14e8ab5143ebf67140cbd884d703a0567be"

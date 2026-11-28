@@ -12,6 +12,7 @@ Sources handled:
   - FSDK junction ref (git describe of the pinned release branch)
   - bootc git ref
   - BuildStream plugin refs (git and PyPI sdist)
+  - virt-firmware wheel (Secure Boot fixture tool, exact pinned version)
 
 Usage:
   python3 scripts/update_pins.py [--check]   # --check exits 1 if anything would change
@@ -137,6 +138,22 @@ def pypi_sdist(package: str, current: str, allow_major: bool) -> tuple[str, str]
     return latest, sdists[0]["url"]
 
 
+def pypi_wheel_url(package: str, version: str) -> str:
+    """Return the single pure-Python wheel URL for an exact pinned version."""
+    req = urllib.request.Request(
+        f"https://pypi.org/pypi/{package}/{version}/json",
+        headers={"User-Agent": "mjolnir-update-pins/1.0"},
+    )
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        data = json.load(resp)
+    wheels = [f["url"] for f in data["urls"]
+              if f["packagetype"] == "bdist_wheel"
+              and f["filename"].endswith("-py3-none-any.whl")]
+    if len(wheels) != 1:
+        raise RuntimeError(f"expected one py3-none-any wheel for {package} {version}")
+    return wheels[0]
+
+
 BINARY_SOURCES = [
     # (version key, sha256 key prefix, URL template)
     ("kubernetes-version", "kubelet", "https://dl.k8s.io/release/v{v}/bin/linux/{arch}/kubelet"),
@@ -204,6 +221,19 @@ def main() -> int:
                 if new_versions.get(key) != value:
                     changes.append(f"{key}: {new_versions.get(key)} -> {value}")
                     new_versions[key] = value
+
+    # Secure Boot fixture tool: version is the canonical fact, the wheel
+    # sha256 is recomputed from PyPI so a Renovate bump never leaves a stale
+    # pin. gen-secureboot-fixtures.sh verifies the same digest at run time.
+    try:
+        wheel_url = pypi_wheel_url("virt-firmware", versions["virt-firmware-version"])
+        wheel_sha = download_sha256(wheel_url)
+        key = "virt-firmware-wheel-sha256"
+        if new_versions.get(key) != wheel_sha:
+            changes.append(f"{key}: {new_versions.get(key)} -> {wheel_sha}")
+            new_versions[key] = wheel_sha
+    except Exception as exc:
+        print(f"warning: virt-firmware pin lookup failed: {exc}", file=sys.stderr)
 
     if args.binary_only:
         return write_results(versions, new_versions, changes, args)

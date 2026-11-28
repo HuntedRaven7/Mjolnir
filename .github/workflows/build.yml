@@ -37,6 +37,7 @@ jobs:
           python3 tests/test_fleet_runner.py
           python3 tests/test_initramfs_policy.py
           python3 tests/test_initramfs_sanitizer.py
+          python3 tests/test_secureboot_fixtures.py
       # Checks the pinned FSDK config script, not the built kernel. VXLAN is an
       # accepted gap: Cilium asks for tunnel-protocol=vxlan but FSDK's config
       # does not enable it yet. The boot test must cover the loaded modules.
@@ -262,6 +263,54 @@ jobs:
             unset BST_CACHE_KEY
           fi
           just cache-push
+
+      # The unlock fixtures used by Gram's OVMF + swtpm harness. They come
+      # from the same signing-only artifacts as this image, so uki-signed.efi
+      # carries the PCR policy that unseals the state of the image built here.
+      - name: Generate Secure Boot fixtures
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq python3-cryptography ovmf binutils unzip
+          just fixtures
+
+      - name: Upload Secure Boot fixtures
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: mjolnir-secureboot-fixtures
+          path: fixtures-out/
+          retention-days: 90
+
+  # Publishes the three public fixtures to a stable release tag so Gram's
+  # curl-based provisioning needs no URL changes. Kept separate from `image`
+  # so that job keeps only read access to repository contents.
+  publish-fixtures:
+    needs: image
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download fixtures artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh run download "${{ github.run_id }}" \
+            -n mjolnir-secureboot-fixtures -D fixtures
+          test -s fixtures/SHA256SUMS
+
+      - name: Publish fixtures to stable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-secureboot-fixtures.sh fixtures
 
   # Check what can be checked for aarch64 without compiling: the committed
   # arm64 varlink pin, upstream availability of every arm64 source pin, and the

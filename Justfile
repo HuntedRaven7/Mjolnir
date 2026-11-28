@@ -88,6 +88,7 @@ test:
     python3 tests/test_initramfs_sanitizer.py
     python3 tests/test_update_pins.py
     python3 tests/test_pins.py
+    python3 tests/test_secureboot_fixtures.py
     python3 tests/test_image_contents.py "{{image_name}}:{{image_tag}}"
     python3 tests/test_boot_assets.py "{{image_name}}:{{image_tag}}"
 
@@ -115,6 +116,22 @@ boot-test:
     #!/usr/bin/env bash
     set -euo pipefail
     exec bash "{{justfile_directory()}}/testsuite/boot/test-boot.sh" "{{image_name}}:{{image_tag}}"
+
+# Build the public Secure Boot unlock fixtures from the signing-only BST
+# artifacts. Requires a completed `just build` and the runner tools listed in
+# docs/SECUREBOOT-FIXTURES.md. No private key is written to the output.
+fixtures:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ROOT="{{justfile_directory()}}"
+    OUT="$ROOT/fixtures-out"
+    KEYS="$ROOT/.build-out/fixture-keys"
+    UKI="$ROOT/.build-out/fixture-uki"
+    rm -rf "$OUT" "$KEYS" "$UKI"
+    mkdir -p "$KEYS" "$UKI"
+    just bst artifact checkout uki/boot-keys.bst --directory /src/.build-out/fixture-keys
+    just bst artifact checkout uki/mjolnir-uki.bst --directory /src/.build-out/fixture-uki
+    exec bash "$ROOT/scripts/gen-secureboot-fixtures.sh" "$ROOT" "$KEYS" "$UKI" "$OUT"
 
 # Boot the raw disk image headlessly with a serial console.
 vm:

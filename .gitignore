@@ -6,6 +6,7 @@
 /*.ociarchive
 /*.tar
 /rootfs/
+/fixtures-out/
 
 # Generated disk images
 *.raw
