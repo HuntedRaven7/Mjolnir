@@ -6,6 +6,7 @@ enable mjolnir-join.service
 enable mjolnir-apply.service
 enable varlink-httpd.socket
 enable mjolnir-state-enroll.service
+enable mjolnir-state-unlocked.service
 enable mjolnir-etcd-snapshot.timer
 enable NetworkManager.service
 enable systemd-resolved.service

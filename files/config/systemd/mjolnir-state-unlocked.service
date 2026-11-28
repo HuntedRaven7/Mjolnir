@@ -1,0 +1,19 @@
+[Unit]
+Description=Report MjolnirState unlock on the serial console
+DefaultDependencies=no
+After=var-lib-mjolnir.mount
+RequiresMountsFor=/var/lib/mjolnir
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# `console` alone is not a valid systemd output specifier: systemd rejects it
+# and silently falls back to the journal, which loses the needle on serial.
+# `journal+console` is valid and the signed cmdline enables journald console
+# forwarding, so the echo reaches ttyS0.
+ExecStart=/usr/bin/echo MjolnirState: unlocked
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=local-fs.target

@@ -142,14 +142,47 @@ jobs:
           max-layers: "128"
           source-date-epoch: auto
 
+      # The image repository publishes these three assets alongside a release.
+      # When the base URL is not configured the boot test records a SKIP for the
+      # Secure Boot cases; it never relaxes an assertion.
+      - name: Provision Secure Boot fixtures
+        env:
+          FIXTURE_BASE_URL: ${{ vars.SECUREBOOT_FIXTURE_BASE_URL }}
+          FIXTURE_DIR: ${{ runner.temp }}/mjolnir-secureboot-fixtures
+        run: |
+          set -euo pipefail
+          mkdir -p "$FIXTURE_DIR"
+          if [ -z "$FIXTURE_BASE_URL" ]; then
+            echo "NOTICE: SECUREBOOT_FIXTURE_BASE_URL is not configured."
+            echo "The Secure Boot swtpm cases will record a SKIP."
+            exit 0
+          fi
+          for fixture in OVMF_VARS.enrolled.fd uki-signed.efi uki-unknown.efi; do
+            curl -fsSL "$FIXTURE_BASE_URL/$fixture" -o "$FIXTURE_DIR/$fixture"
+          done
+
       # The install checks that bootc accepts the signed digest, and the OVMF
       # boot checks that the shell-free initramfs actually mounts the composefs
       # root and reaches user space. A static content check cannot prove that.
       - name: Install and boot test (OVMF)
+        env:
+          FIXTURE_DIR: ${{ runner.temp }}/mjolnir-secureboot-fixtures
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qemu-system-x86 ovmf binutils
+          sudo apt-get install -y -qq qemu-system-x86 ovmf binutils swtpm
           just boot-test
+
+      - name: Upload Secure Boot serial logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: mjolnir-secureboot-serial-logs
+          path: |
+            ${{ runner.temp }}/mjolnir-boot-test/secureboot-signed.log
+            ${{ runner.temp }}/mjolnir-boot-test/secureboot-unknown.log
+            ${{ runner.temp }}/mjolnir-boot-test/secureboot-*/enroll.log
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Export image for scanning
         run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest

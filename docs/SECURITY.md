@@ -148,6 +148,17 @@ The initramfs is built with the dracut `crypt` module and the systemd TPM2
 cryptsetup token plugin, whose ELF dependencies pull in `tpm2-tss`. It includes
 the build-time `/etc/crypttab`.
 
+The unlock outcome has a stable serial contract. `mjolnir-state-unlocked.service`
+prints `MjolnirState: unlocked` after `var-lib-mjolnir.mount`. An `OnFailure=`
+drop-in on `systemd-cryptsetup@mjolnir-state.service` starts
+`mjolnir-state-unseal-failed.service`, which prints `PCR policy` and
+`Failed to unseal`. The drop-in and the failure unit are also sealed into the
+initramfs, because a PCR policy miss fails cryptsetup before switch-root. No
+key material changes and the PCR 7 plus signed PCR 11 binding is untouched.
+`testsuite/boot/test-boot.sh` boots two isolated OVMF plus swtpm cases against
+the published signed and unknown-key UKIs and asserts those needles; see
+[testsuite/README.md](../testsuite/README.md) for the fixture contract.
+
 ## Factory reset
 
 `io.mjolnir.Fleet.FactoryReset` requires a `scope`

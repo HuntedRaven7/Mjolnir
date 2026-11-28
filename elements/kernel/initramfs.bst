@@ -66,6 +66,13 @@ config:
     install -Dm644 /config/crypttab /etc/crypttab
     install -Dm644 /config/dracut/50-mjolnir-tpm2.conf \
       /etc/dracut.conf.d/50-mjolnir-tpm2.conf
+    # The PCR policy failure is reported by an OnFailure drop-in on the
+    # cryptsetup instance. Stage both files for dracut's install_items so the
+    # wires exist in the initramfs, not just in the booted rootfs.
+    install -Dm644 /config/systemd/mjolnir-state-unseal-failed.service \
+      /usr/lib/systemd/system/mjolnir-state-unseal-failed.service
+    install -Dm644 /config/systemd/systemd-cryptsetup@mjolnir-state.service.d/10-mjolnir-failure.conf \
+      /usr/lib/systemd/system/systemd-cryptsetup@mjolnir-state.service.d/10-mjolnir-failure.conf
     # FSDK installs shared libraries in the multiarch libdir but ships an empty
     # /etc/ld.so.conf. dracut-install resolves DT_NEEDED from that file plus
     # /lib and /usr/lib, so with an empty config the initramfs contains no libc
@@ -129,6 +136,15 @@ config:
     for f in bootc-root-setup.service initramfs-setup 10-after-bootc.conf; do
       lsinitrd /initramfs.img | grep -q "$f" || {
         echo "initramfs is missing $f" >&2
+        exit 1
+      }
+    done
+    # Prove the PCR failure report travels with the initramfs. A drop-in in
+    # the rootfs alone cannot fire before switch-root.
+    for f in usr/lib/systemd/system/mjolnir-state-unseal-failed.service \
+             10-mjolnir-failure.conf usr/bin/echo; do
+      lsinitrd /initramfs.img | grep -q "$f" || {
+        echo "initramfs is missing the PCR failure reporter: $f" >&2
         exit 1
       }
     done

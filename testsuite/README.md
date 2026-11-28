@@ -12,8 +12,9 @@ clusters and the mTLS Varlink API.
   `.github/workflows/multinode.yml` on `testing`.
 - `plugin-smoke.sh` — Console plugin smoke check, run by
   `.github/workflows/plugin-test.yml`.
-- `boot/test-boot.sh` — install + OVMF boot proof, run by the `image` job in
-  `.github/workflows/build.yml` on pull requests and pushes.
+- `boot/test-boot.sh` — install + OVMF boot proof and the two Secure Boot
+  swtpm cases, run by the `image` job in `.github/workflows/build.yml` on pull
+  requests and pushes.
 
 ## Boot verification
 
@@ -26,4 +27,53 @@ root as a distinct systemd-boot entry. See
 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 
 Run it locally with `sudo just boot-test` after `just build`; it needs root,
-KVM, QEMU, OVMF and `objcopy`.
+KVM, QEMU, OVMF and `objcopy`. The Secure Boot cases additionally need `swtpm`.
+
+## Secure Boot unlock cases
+
+`boot/test-boot.sh` appends two cases after the OVMF check above. First it
+boots the installed disk once with its own signed entry so systemd-repart can
+create the encrypted `MjolnirState` partition: repart runs only after
+switch-root, so the initramfs cryptsetup cannot see the partition on a disk
+that has never been booted. Each case then copies that provisioned disk and
+gets its own copy of the enrolled OVMF variable store and its own swtpm state
+directory, so a failed unseal in one case cannot leak into the other. Both
+cases first boot `uki-signed.efi` to establish the TPM2 enrollment, then reboot
+with the case's update:
+
+| Case | Update installed in the ESP | Required serial evidence |
+| --- | --- | --- |
+| signed | `uki-signed.efi` | `MjolnirState: unlocked`, no `Failed to unseal` |
+| unknown | `uki-unknown.efi` | `PCR policy` and `Failed to unseal`, no unlock |
+
+The needles come from image units, not from journal text the guest happens to
+emit. `mjolnir-state-unlocked.service` runs after `var-lib-mjolnir.mount` and is
+enabled by the preset. A drop-in for `systemd-cryptsetup@mjolnir-state.service`
+wires `OnFailure=` to `mjolnir-state-unseal-failed.service`; that unit and the
+drop-in are installed in both the rootfs and the initramfs because the PCR miss
+fails cryptsetup before switch-root. Both units use
+`StandardOutput=journal+console` / `StandardError=journal+console`; a bare
+`console` specifier is invalid in systemd and is silently dropped. The signed
+cmdline enables journald forwarding to `ttyS0`, so the needles reach the serial
+log both before and after switch-root.
+
+### Fixtures
+
+The three fixtures are release assets of this repository, published by the
+Secure Boot fixture work. The harness reads them from `FIXTURE_DIR`, which
+defaults to `$RUNNER_TEMP/mjolnir-secureboot-fixtures`:
+
+| File | Meaning |
+| --- | --- |
+| `OVMF_VARS.enrolled.fd` | Variable store with PK/KEK/db holding the test key, Secure Boot enabled; copied fresh per case |
+| `uki-signed.efi` | Signed update that satisfies the existing PCR 11 policy |
+| `uki-unknown.efi` | Same boot, signed with an unknown PCR signing key |
+
+Env overrides: `FIXTURE_DIR`, `SECUREBOOT_FIXTURE_DIR`, `OVMF_VARS_ENROLLED`,
+`UKI_SIGNED`, `UKI_UNKNOWN`, `SIGNED_LOG`, `UNKNOWN_LOG`, `SWTPM`, `BOOT_WAIT`,
+`GRACE_SECONDS`, and the three needle overrides `UNLOCK_NEEDLE`, `PCR_NEEDLE`,
+`UNSEAL_FAIL_NEEDLE`. CI sets `FIXTURE_DIR` from the
+`SECUREBOOT_FIXTURE_BASE_URL` repository variable. With no variable configured
+the two cases write SKIP logs and the run stays green; the assertions in the
+script and the static checks in `tests/test_units.py` still run on every PR.
+Both serial logs are uploaded as the `mjolnir-secureboot-serial-logs` artifact.

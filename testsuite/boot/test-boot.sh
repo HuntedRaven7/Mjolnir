@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Full install + OVMF boot proof for the signed composefs UKI.
+# Full install + OVMF boot proof for the signed composefs UKI, plus two
+# Secure Boot + swtpm cases that consume the published UKI/variable-store
+# fixtures.
 #
 # Runs on the CI runner (root required). There is no shell in the image: the
 # image is installed with `bootc install to-disk`, the installed UKI is checked
 # against the composefs digest of the image under test, and the disk is booted
 # through OVMF/systemd-boot. Readiness is proven by the image's own Varlink
-# socket, not by injecting a shell or a login into the target.
+# socket, not by injecting a shell or a login into the target. The extra cases
+# read serial needles emitted by image units; fixtures are described in
+# testsuite/README.md.
 set -euo pipefail
 
 IMAGE="${1:-localhost/mjolnir:latest}"
@@ -30,7 +34,19 @@ sudo -n true || fail "passwordless sudo is required for the privileged install a
 
 rm -rf "$WORK"
 mkdir -p "$WORK/rootfs" "$WORK/esp"
-trap 'set +e; sudo umount "$WORK/esp" 2>/dev/null; [ -n "${LOOP:-}" ] && sudo losetup -d "$LOOP" 2>/dev/null; kill "${QEMU_PID:-}" 2>/dev/null; sudo podman rm -f mjolnir-boot-src 2>/dev/null' EXIT
+cleanup_boot() {
+  set +e
+  local l p f
+  sudo umount "$WORK/esp" 2>/dev/null
+  [ -n "${LOOP:-}" ] && sudo losetup -d "$LOOP" 2>/dev/null
+  for l in "${CASE_LOOPS[@]:-}"; do [ -n "$l" ] && sudo losetup -d "$l" 2>/dev/null; done
+  for p in "${CASE_QEMU_PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done
+  for f in "$WORK"/secureboot-*/tpm/swtpm.pid; do
+    [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null
+  done
+  sudo podman rm -f mjolnir-boot-src 2>/dev/null
+}
+trap cleanup_boot EXIT
 
 echo "==> computing the expected composefs digest from the image under test"
 # bootc install hashes the OCI layers in container storage, not a flattened tar
@@ -222,3 +238,217 @@ fi
 pass "booted with OVMF: signed UKI cmdline, live user space, no failed units"
 
 echo "Serial console log: $SERIAL"
+
+# ---------------------------------------------------------------------------
+# Secure Boot + swtpm cases.
+#
+# The fixtures are release assets of the image repository. Each case gets its
+# own copy of the installed disk, the enrolled variable store and the swtpm
+# state directory. Missing fixtures produce SKIP logs and a green run: the
+# existing checks above stay intact, and no assertion is weakened. Set
+# FIXTURE_DIR (or the three per-file overrides) to run the cases.
+# ---------------------------------------------------------------------------
+FIXTURE_DIR="${FIXTURE_DIR:-${SECUREBOOT_FIXTURE_DIR:-${RUNNER_TEMP:-/tmp}/mjolnir-secureboot-fixtures}}"
+VARS_ENROLLED="${OVMF_VARS_ENROLLED:-$FIXTURE_DIR/OVMF_VARS.enrolled.fd}"
+UKI_SIGNED="${UKI_SIGNED:-$FIXTURE_DIR/uki-signed.efi}"
+UKI_UNKNOWN="${UKI_UNKNOWN:-$FIXTURE_DIR/uki-unknown.efi}"
+SIGNED_LOG="${SIGNED_LOG:-$WORK/secureboot-signed.log}"
+UNKNOWN_LOG="${UNKNOWN_LOG:-$WORK/secureboot-unknown.log}"
+SWTPM="${SWTPM:-swtpm}"
+NEEDLE_UNLOCK="${UNLOCK_NEEDLE:-MjolnirState: unlocked}"
+NEEDLE_PCR="${PCR_NEEDLE:-PCR policy}"
+NEEDLE_FAILED="${UNSEAL_FAIL_NEEDLE:-Failed to unseal}"
+BOOT_WAIT="${BOOT_WAIT:-180}"
+GRACE="${GRACE_SECONDS:-10}"
+CASE_LOOPS=()
+CASE_QEMU_PIDS=()
+
+# Poll the disk while the VM runs until systemd-repart has both created the
+# MjolnirState partition and written its LUKS2 header. Reattach a fresh loop
+# node on each pass so the new partition table is visible to the host.
+wait_for_state_partition() {
+  local disk="$1" limit="${2:-180}" loop part elapsed=0
+  while [ "$elapsed" -lt "$limit" ]; do
+    if loop=$(sudo losetup -f --show -P "$disk" 2>/dev/null); then
+      for part in "${loop}"p*; do
+        [ -b "$part" ] || continue
+        [ "$(sudo blkid -p -o value -s PARTLABEL "$part" 2>/dev/null || true)" = "MjolnirState" ] || continue
+        if [ "$(sudo blkid -p -o value -s TYPE "$part" 2>/dev/null || true)" = "crypto_LUKS" ]; then
+          sudo losetup -d "$loop" 2>/dev/null || true
+          # The LUKS header appears before repart finishes creating the
+          # filesystem inside it. Give that work time to land on the disk
+          # before the VM is stopped; observed repart work takes under 10s.
+          sleep 30
+          return 0
+        fi
+      done
+      sudo losetup -d "$loop" 2>/dev/null || true
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  return 1
+}
+
+# bootc --run-repart leaves MjolnirState for systemd-repart on first boot, and
+# repart only runs after switch-root. The initramfs cryptsetup has already
+# timed out by then, so a first boot never mounts state and the unlock needle
+# cannot fire. Boot the installed disk once with its own signed entry (no
+# fixtures, no swtpm) to let the image's repart.d create the empty-key LUKS2
+# partition. Each case then starts from that disk and enrolls its TPM slot on
+# the first fixture boot, which is what the two cases below assert.
+provision_state_partition() {
+  local log="$WORK/state-provision.log" pid
+  echo "==> provisioning MjolnirState: boot once so repart creates the encrypted partition"
+  sudo qemu-system-x86_64 \
+    -m 2048 -smp 2 -enable-kvm -nographic \
+    -drive if=pflash,format=raw,unit=0,file="$WORK/code.fd",readonly=on \
+    -drive if=pflash,format=raw,unit=1,file="$WORK/vars.fd" \
+    -drive file="$WORK/disk.raw",format=raw,media=disk \
+    -smbios type=11,value=io.systemd.credential:mjolnir.boot-report=1 \
+    -smbios "type=11,value=io.systemd.credential.binary:varlink-httpd.tls.trust=$CA_B64" \
+    -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
+    >"$log" 2>&1 &
+  pid=$!
+  CASE_QEMU_PIDS+=("$pid")
+  if ! wait_for_state_partition "$WORK/disk.raw"; then
+    tail -60 "$log" >&2 || true
+    fail "systemd-repart did not create an encrypted MjolnirState partition"
+  fi
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  pass "MjolnirState partition created by the image's systemd-repart"
+}
+
+assert_needle() {
+  local log="$1" needle="$2" label="$3"
+  grep -aqF "$needle" "$log" || fail "$label: missing serial needle '$needle' in $log"
+  pass "$label: serial needle '$needle'"
+}
+
+assert_no_needle() {
+  local log="$1" needle="$2" label="$3"
+  if grep -aqF "$needle" "$log"; then
+    fail "$label: unexpected serial needle '$needle' in $log"
+  fi
+  pass "$label: no '$needle'"
+}
+
+# Put one fixture UKI on the case disk's ESP. The debug entry is removed from
+# the copy so systemd-boot cannot choose it instead of the fixture.
+install_case_uki() {
+  local cd="$1" uki="$2" loop part p count
+  loop=$(sudo losetup -f --show -P "$cd/disk.raw") || fail "cannot attach $cd/disk.raw"
+  CASE_LOOPS+=("$loop")
+  part=""
+  for p in "${loop}"p*; do
+    [ -b "$p" ] || continue
+    [ "$(sudo blkid -o value -s TYPE "$p" 2>/dev/null || true)" = "vfat" ] && part="$p"
+  done
+  [ -n "$part" ] || fail "no ESP partition on $cd/disk.raw"
+  sudo mount "$part" "$WORK/esp" || fail "cannot mount the case ESP"
+  sudo install -Dm644 "$uki" "$WORK/esp/EFI/Linux/$(basename "$UKI")" || \
+    fail "cannot install $uki on the case ESP"
+  sudo rm -f "$WORK/esp/EFI/Linux/$(basename "$DBG_EFI")" \
+    "$WORK/esp/loader/entries/99-mjolnir-debug.conf"
+  count=$(sudo find "$WORK/esp/EFI/Linux" -maxdepth 1 -name '*.efi' -type f | wc -l)
+  [ "$count" -eq 1 ] || fail "case ESP has $count UKIs; expected exactly one"
+  sudo umount "$WORK/esp" || fail "cannot unmount the case ESP"
+  sudo losetup -d "$loop" || fail "cannot detach $loop"
+}
+
+boot_case() {
+  local label="$1" log="$2" cd="$3" primary="$4" pid elapsed=0
+  SERIAL="$log"
+  # The log lives in the user-owned WORK dir; root writes through this fd.
+  # shellcheck disable=SC2024
+  sudo qemu-system-x86_64 \
+    -m 2048 -smp 2 -enable-kvm -nographic \
+    -drive if=pflash,format=raw,unit=0,file="$WORK/code.fd",readonly=on \
+    -drive if=pflash,format=raw,unit=1,file="$cd/vars.fd" \
+    -drive file="$cd/disk.raw",format=raw,media=disk \
+    -chardev "socket,id=chrtpm,path=$cd/tpm/swtpm.sock" \
+    -tpmdev emulator,id=tpm0,chardev=chrtpm \
+    -device tpm-tis,tpmdev=tpm0 \
+    -smbios type=11,value=io.systemd.credential:mjolnir.boot-report=1 \
+    -smbios "type=11,value=io.systemd.credential.binary:varlink-httpd.tls.trust=$CA_B64" \
+    -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
+    >"$log" 2>&1 &
+  pid=$!
+  CASE_QEMU_PIDS+=("$pid")
+  while [ "$elapsed" -lt "$BOOT_WAIT" ]; do
+    if grep -aqF "$primary" "$log" 2>/dev/null; then break; fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  # Give late units time to emit a needle before asserting its absence.
+  sleep "$GRACE"
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  [ -s "$log" ] || fail "$label: VM produced no serial output"
+  pass "$label: serial log captured at $log"
+}
+
+secureboot_cases() {
+  local missing=0 f label cd tpm
+  for f in "$VARS_ENROLLED" "$UKI_SIGNED" "$UKI_UNKNOWN"; do
+    if [ ! -s "$f" ]; then
+      echo "    missing fixture: $f"
+      missing=1
+    fi
+  done
+  if [ "$missing" -ne 0 ]; then
+    mkdir -p "$WORK"
+    for f in "$SIGNED_LOG" "$UNKNOWN_LOG"; do
+      printf 'SKIP: Secure Boot swtpm cases did not run.\nFixture directory: %s\nThe three fixtures are release assets of the image repository; see testsuite/README.md.\n' \
+        "$FIXTURE_DIR" >"$f"
+    done
+    echo "SKIP: Secure Boot swtpm cases (fixtures not present in $FIXTURE_DIR)"
+    return 0
+  fi
+  need "$SWTPM"
+  provision_state_partition
+
+  for label in signed unknown; do
+    cd="$WORK/secureboot-$label"
+    tpm="$cd/tpm"
+    rm -rf "$cd"
+    mkdir -p "$tpm"
+    cp "$WORK/disk.raw" "$cd/disk.raw" || fail "cannot copy the disk for $label"
+    cp "$VARS_ENROLLED" "$cd/vars.fd" || fail "cannot copy the variable store for $label"
+
+    echo "==> Secure Boot case $label: enrolling state with the signed UKI"
+    install_case_uki "$cd" "$UKI_SIGNED"
+    "$SWTPM" socket --tpmstate "dir=$tpm" \
+      --ctrl "type=unixio,path=$tpm/swtpm.sock" \
+      --pid "file=$tpm/swtpm.pid" --tpm2 --daemon || fail "swtpm did not start for $label"
+    for _ in $(seq 1 50); do
+      [ -S "$tpm/swtpm.sock" ] && break
+      sleep 0.1
+    done
+    [ -S "$tpm/swtpm.sock" ] || fail "swtpm socket did not appear for $label"
+
+    boot_case "$label-enroll" "$cd/enroll.log" "$cd" "$NEEDLE_UNLOCK"
+    assert_needle "$cd/enroll.log" "$NEEDLE_UNLOCK" "$label-enroll"
+
+    if [ "$label" = signed ]; then
+      echo "==> Secure Boot case signed: booting the signed update again"
+      install_case_uki "$cd" "$UKI_SIGNED"
+      boot_case signed "$SIGNED_LOG" "$cd" "$NEEDLE_UNLOCK"
+      assert_needle "$SIGNED_LOG" "$NEEDLE_UNLOCK" signed
+      assert_no_needle "$SIGNED_LOG" "$NEEDLE_FAILED" signed
+    else
+      echo "==> Secure Boot case unknown: booting the unknown PCR-key UKI"
+      install_case_uki "$cd" "$UKI_UNKNOWN"
+      boot_case unknown "$UNKNOWN_LOG" "$cd" "$NEEDLE_FAILED"
+      assert_needle "$UNKNOWN_LOG" "$NEEDLE_PCR" unknown
+      assert_needle "$UNKNOWN_LOG" "$NEEDLE_FAILED" unknown
+      assert_no_needle "$UNKNOWN_LOG" "$NEEDLE_UNLOCK" unknown
+    fi
+    kill "$(cat "$tpm/swtpm.pid")" 2>/dev/null || true
+  done
+  echo "Secure Boot serial logs: $SIGNED_LOG, $UNKNOWN_LOG"
+}
+
+secureboot_cases
