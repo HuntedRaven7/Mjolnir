@@ -29,8 +29,8 @@ variables:
   containerd-arm64-sha256: "fdfab81a86192ddb8165d72f116ec985485c9e12505e323c4f4579c48020f276"
 
   runc-version: "1.6.0"
-  runc-amd64-sha256: "50dcc0b257d724fe07f3852c2dda52340223f038227c7572644eec870741223e"
-  runc-arm64-sha256: "07b52aee923cc432c38fe4fb6809a08fc6471994efed650af3635350588a20be"
+  runc-amd64-sha256: "84da88622bbfa6dcccf52262ef52e81847ff5831190be71fdc7db1358bd199a4"
+  runc-arm64-sha256: "604f08e0fabd63a58853210cee48f1edd16aa79bbef15a1a7d8f07f9f4fe2f72"
 
   cni-plugins-version: "1.10.0"
   cni-plugins-amd64-sha256: "ce8603d6a1bd448efba5bd6dc44f38dce349f821aa57e1bb354b52628ebf1853"
