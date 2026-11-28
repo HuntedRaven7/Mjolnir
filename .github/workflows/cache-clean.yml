@@ -18,7 +18,7 @@ jobs:
       packages: write
     steps:
       - name: Clean up BuildStream cache package
-        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@66e378ec91547d283fa077dec1282540b85256d2 # v1
+        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@d8f31e9ac688e15883c4a673aa389ac7cf76beab # v1
         with:
           packages: mjolnir-cache
           older-than: 2 days

@@ -135,7 +135,7 @@ jobs:
       # so the boot harness has to install the same rechunked image that is
       # published below.
       - name: Rechunk image with chunkah
-        uses: projectbluefin/actions/bootc-build/chunka@66e378ec91547d283fa077dec1282540b85256d2 # v1
+        uses: projectbluefin/actions/bootc-build/chunka@d8f31e9ac688e15883c4a673aa389ac7cf76beab # v1
         with:
           source-image: localhost/mjolnir:latest
           max-layers: "128"
@@ -154,7 +154,7 @@ jobs:
         run: sudo podman save --format docker-archive -o /tmp/scan-image.tar localhost/mjolnir:latest
 
       - name: Scan image
-        uses: projectbluefin/actions/bootc-build/scan-image@66e378ec91547d283fa077dec1282540b85256d2 # v1
+        uses: projectbluefin/actions/bootc-build/scan-image@d8f31e9ac688e15883c4a673aa389ac7cf76beab # v1
         continue-on-error: true
         with:
           input: /tmp/scan-image.tar
@@ -221,7 +221,7 @@ jobs:
 
       - name: Sign and attest
         if: github.event_name != 'pull_request'
-        uses: projectbluefin/actions/bootc-build/sign-and-publish@66e378ec91547d283fa077dec1282540b85256d2 # v1
+        uses: projectbluefin/actions/bootc-build/sign-and-publish@d8f31e9ac688e15883c4a673aa389ac7cf76beab # v1
         with:
           image: ghcr.io/${{ env.IMAGE_OWNER }}/mjolnir
           digest: ${{ steps.push.outputs.digest }}
@@ -238,7 +238,7 @@ jobs:
 
       - name: Prune old images
         if: github.event_name != 'pull_request'
-        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@66e378ec91547d283fa077dec1282540b85256d2 # v1
+        uses: projectbluefin/actions/bootc-build/ghcr-cleanup@d8f31e9ac688e15883c4a673aa389ac7cf76beab # v1
         with:
           # This action forwards `packages`, not `image-name`. Without it the
           # underlying cleanup action falls back to github.repository.name
