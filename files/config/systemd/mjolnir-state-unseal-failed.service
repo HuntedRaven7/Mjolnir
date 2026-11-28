@@ -4,9 +4,10 @@ DefaultDependencies=no
 
 [Service]
 Type=oneshot
-# The failure happens in the initramfs, before switch-root. Both needles go
-# straight to /dev/console; journald forwarding is not available yet.
+# The failure happens in the initramfs, before switch-root. `console` alone is
+# not a valid systemd output specifier, so use `journal+console`: journald is
+# running in the initramfs and the signed cmdline forwards it to ttyS0.
 ExecStart=/usr/bin/echo PCR policy
 ExecStart=/usr/bin/echo Failed to unseal
-StandardOutput=console
-StandardError=console
+StandardOutput=journal+console
+StandardError=journal+console

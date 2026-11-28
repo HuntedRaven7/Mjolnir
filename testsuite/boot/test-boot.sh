@@ -263,6 +263,63 @@ GRACE="${GRACE_SECONDS:-10}"
 CASE_LOOPS=()
 CASE_QEMU_PIDS=()
 
+# Poll the disk while the VM runs until systemd-repart has both created the
+# MjolnirState partition and written its LUKS2 header. Reattach a fresh loop
+# node on each pass so the new partition table is visible to the host.
+wait_for_state_partition() {
+  local disk="$1" limit="${2:-180}" loop part elapsed=0
+  while [ "$elapsed" -lt "$limit" ]; do
+    if loop=$(sudo losetup -f --show -P "$disk" 2>/dev/null); then
+      for part in "${loop}"p*; do
+        [ -b "$part" ] || continue
+        [ "$(sudo blkid -p -o value -s PARTLABEL "$part" 2>/dev/null || true)" = "MjolnirState" ] || continue
+        if [ "$(sudo blkid -p -o value -s TYPE "$part" 2>/dev/null || true)" = "crypto_LUKS" ]; then
+          sudo losetup -d "$loop" 2>/dev/null || true
+          # The LUKS header appears before repart finishes creating the
+          # filesystem inside it. Give that work time to land on the disk
+          # before the VM is stopped; observed repart work takes under 10s.
+          sleep 30
+          return 0
+        fi
+      done
+      sudo losetup -d "$loop" 2>/dev/null || true
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+  return 1
+}
+
+# bootc --run-repart leaves MjolnirState for systemd-repart on first boot, and
+# repart only runs after switch-root. The initramfs cryptsetup has already
+# timed out by then, so a first boot never mounts state and the unlock needle
+# cannot fire. Boot the installed disk once with its own signed entry (no
+# fixtures, no swtpm) to let the image's repart.d create the empty-key LUKS2
+# partition. Each case then starts from that disk and enrolls its TPM slot on
+# the first fixture boot, which is what the two cases below assert.
+provision_state_partition() {
+  local log="$WORK/state-provision.log" pid
+  echo "==> provisioning MjolnirState: boot once so repart creates the encrypted partition"
+  sudo qemu-system-x86_64 \
+    -m 2048 -smp 2 -enable-kvm -nographic \
+    -drive if=pflash,format=raw,unit=0,file="$WORK/code.fd",readonly=on \
+    -drive if=pflash,format=raw,unit=1,file="$WORK/vars.fd" \
+    -drive file="$WORK/disk.raw",format=raw,media=disk \
+    -smbios type=11,value=io.systemd.credential:mjolnir.boot-report=1 \
+    -smbios "type=11,value=io.systemd.credential.binary:varlink-httpd.tls.trust=$CA_B64" \
+    -netdev user,id=net0 -device virtio-net-pci,netdev=net0 \
+    >"$log" 2>&1 &
+  pid=$!
+  CASE_QEMU_PIDS+=("$pid")
+  if ! wait_for_state_partition "$WORK/disk.raw"; then
+    tail -60 "$log" >&2 || true
+    fail "systemd-repart did not create an encrypted MjolnirState partition"
+  fi
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  pass "MjolnirState partition created by the image's systemd-repart"
+}
+
 assert_needle() {
   local log="$1" needle="$2" label="$3"
   grep -aqF "$needle" "$log" || fail "$label: missing serial needle '$needle' in $log"
@@ -351,6 +408,7 @@ secureboot_cases() {
     return 0
   fi
   need "$SWTPM"
+  provision_state_partition
 
   for label in signed unknown; do
     cd="$WORK/secureboot-$label"

@@ -83,18 +83,28 @@ def main() -> int:
 
     require(unlocked, "ExecStart=/usr/bin/echo MjolnirState: unlocked", "unlock needle")
     require(unlocked, "After=var-lib-mjolnir.mount", "unlock ordering")
-    require(unlocked, "StandardOutput=console", "console output")
     require("files/config/presets/80-mjolnir.preset",
             "enable mjolnir-state-unlocked.service", "unlock preset")
     require(failed, "ExecStart=/usr/bin/echo PCR policy", "PCR needle")
     require(failed, "ExecStart=/usr/bin/echo Failed to unseal", "unseal failure needle")
-    require(failed, "StandardOutput=console", "console output")
+    # A bare `console` is not a valid StandardOutput= specifier: systemd drops
+    # it and the needle never reaches the serial log. Both units must forward
+    # through journald *and* the console (enabled by the signed cmdline).
+    for unit in (unlocked, failed):
+        require(unit, "StandardOutput=journal+console", "journal+console output")
+        require(unit, "StandardError=journal+console", "journal+console error output")
+        for key in ("StandardOutput", "StandardError"):
+            if re.search(rf"^{key}=console\s*$", text_at(unit), re.MULTILINE):
+                errors.append(f"{unit}: invalid bare '{key}=console' specifier")
     require(dropin, "OnFailure=mjolnir-state-unseal-failed.service", "failure wiring")
     require(dracut, "mjolnir-state-unseal-failed.service", "initramfs failure unit")
     require(dracut, "10-mjolnir-failure.conf", "initramfs drop-in")
     require(dracut, "/usr/bin/echo", "initramfs echo binary")
     for needle in ("MjolnirState: unlocked", "PCR policy", "Failed to unseal"):
         require(boot, needle, "boot assertion needle")
+    # The cases start from a disk whose encrypted state partition already
+    # exists; otherwise repart creates it after cryptsetup has timed out.
+    require(boot, "provision_state_partition", "state partition provisioning")
 
     # Lid switches must never suspend an unattended node.
     logind = ROOT / "files/config/logind/50-ignore-lid.conf"

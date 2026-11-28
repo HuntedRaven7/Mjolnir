@@ -31,11 +31,15 @@ KVM, QEMU, OVMF and `objcopy`. The Secure Boot cases additionally need `swtpm`.
 
 ## Secure Boot unlock cases
 
-`boot/test-boot.sh` appends two cases after the OVMF check above. Each case
-copies the installed disk and gets its own copy of the enrolled OVMF variable
-store and its own swtpm state directory, so a failed unseal in one case cannot
-leak into the other. Both cases first boot `uki-signed.efi` to establish the
-TPM2 enrollment, then reboot with the case's update:
+`boot/test-boot.sh` appends two cases after the OVMF check above. First it
+boots the installed disk once with its own signed entry so systemd-repart can
+create the encrypted `MjolnirState` partition: repart runs only after
+switch-root, so the initramfs cryptsetup cannot see the partition on a disk
+that has never been booted. Each case then copies that provisioned disk and
+gets its own copy of the enrolled OVMF variable store and its own swtpm state
+directory, so a failed unseal in one case cannot leak into the other. Both
+cases first boot `uki-signed.efi` to establish the TPM2 enrollment, then reboot
+with the case's update:
 
 | Case | Update installed in the ESP | Required serial evidence |
 | --- | --- | --- |
@@ -48,8 +52,10 @@ enabled by the preset. A drop-in for `systemd-cryptsetup@mjolnir-state.service`
 wires `OnFailure=` to `mjolnir-state-unseal-failed.service`; that unit and the
 drop-in are installed in both the rootfs and the initramfs because the PCR miss
 fails cryptsetup before switch-root. Both units use
-`StandardOutput=console` so the strings reach `/dev/console` directly; journald
-forwarding is not reliable during early boot in the VM.
+`StandardOutput=journal+console` / `StandardError=journal+console`; a bare
+`console` specifier is invalid in systemd and is silently dropped. The signed
+cmdline enables journald forwarding to `ttyS0`, so the needles reach the serial
+log both before and after switch-root.
 
 ### Fixtures
 
